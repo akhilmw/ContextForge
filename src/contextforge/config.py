@@ -18,3 +18,14 @@ IGNORED_DIRECTORIES = {
     "dist",
     "build",
 }
+
+LANGUAGE_BY_EXTENSION = {
+    ".py": "python",
+    ".go": "go",
+    ".md": "markdown",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".json": "json",
+    ".sql": "sql",
+    ".txt": "text",
+}
