@@ -29,3 +29,6 @@ LANGUAGE_BY_EXTENSION = {
     ".sql": "sql",
     ".txt": "text",
 }
+
+DEFAULT_CHUNK_SIZE = 20
+DEFAULT_CHUNK_OVERLAP = 5
