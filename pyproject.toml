@@ -3,7 +3,10 @@ name = "contextforge"
 version = "0.1.0"
 description = "A learning-first developer operations RAG system"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "google-genai>=2.8.0",
+    "python-dotenv>=1.2.2",
+]
 
 [dependency-groups]
 dev = [
@@ -13,3 +16,6 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "integration: tests that call external services and may consume quota",
+]
