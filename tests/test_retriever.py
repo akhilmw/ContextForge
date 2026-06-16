@@ -1,0 +1,182 @@
+from pathlib import Path
+
+import pytest
+
+from contextforge.models import Chunk, SearchResult
+from contextforge.retriever import cosine_similarity, retrieve
+from contextforge.store import save_chunks
+
+
+class QueryEmbedder:
+    def __init__(self, vector):
+        self.vector = vector
+
+    def embed_documents(self, texts):
+        raise NotImplementedError
+
+    def embed_query(self, text):
+        return self.vector
+
+
+def make_chunk(chunk_id, embedding, content=None):
+    return Chunk(
+        chunk_id=chunk_id,
+        project_name="demo",
+        file_path=f"src/{chunk_id}.py",
+        language="python",
+        content=content or f"content for {chunk_id}",
+        start_line=1,
+        end_line=1,
+        embedding=embedding,
+    )
+
+
+def test_cosine_similarity_identical_vectors():
+    assert cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+
+
+def test_cosine_similarity_orthogonal_vectors():
+    assert cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+
+
+def test_cosine_similarity_opposite_vectors():
+    assert cosine_similarity([1.0, 0.0], [-1.0, 0.0]) == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "error_type", "message"),
+    [
+        ([], [], ValueError, "Vectors cannot be empty"),
+        ([1.0, 2.0], [1.0], ValueError, "Vectors must have the same dimension"),
+        ([0.0, 0.0], [1.0, 0.0], ValueError, "zero vectors"),
+        ([1.0, float("nan")], [1.0, 2.0], TypeError, "finite numbers"),
+        ([True, 1.0], [1.0, 2.0], TypeError, "finite numbers"),
+    ],
+)
+def test_cosine_similarity_rejects_invalid_vectors(a, b, error_type, message):
+    with pytest.raises(error_type, match=message):
+        cosine_similarity(a, b)
+
+
+def test_retrieve_returns_empty_list_for_empty_project(tmp_path):
+    save_chunks(tmp_path, "demo", [])
+
+    results = retrieve(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+    )
+
+    assert results == []
+
+
+def test_retrieve_ranks_results_by_score_descending(tmp_path):
+    chunks = [
+        make_chunk("best", [1.0, 0.0]),
+        make_chunk("middle", [0.5, 0.5]),
+        make_chunk("worst", [-1.0, 0.0]),
+    ]
+    save_chunks(tmp_path, "demo", chunks)
+
+    results = retrieve(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+        top_k=3,
+    )
+
+    assert [result.chunk.chunk_id for result in results] == [
+        "best",
+        "middle",
+        "worst",
+    ]
+    assert [result.score for result in results] == sorted(
+        [result.score for result in results],
+        reverse=True,
+    )
+
+
+def test_retrieve_respects_top_k(tmp_path):
+    chunks = [
+        make_chunk("best", [1.0, 0.0]),
+        make_chunk("middle", [0.5, 0.5]),
+        make_chunk("worst", [-1.0, 0.0]),
+    ]
+    save_chunks(tmp_path, "demo", chunks)
+
+    results = retrieve(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+        top_k=2,
+    )
+
+    assert [result.chunk.chunk_id for result in results] == ["best", "middle"]
+
+
+def test_retrieve_returns_search_result_objects(tmp_path):
+    chunk = make_chunk("best", [1.0, 0.0])
+    save_chunks(tmp_path, "demo", [chunk])
+
+    results = retrieve(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+    )
+
+    assert len(results) == 1
+    assert isinstance(results[0], SearchResult)
+    assert results[0].chunk == chunk
+    assert results[0].score == pytest.approx(1.0)
+
+
+def test_retrieve_rejects_empty_question(tmp_path):
+    save_chunks(tmp_path, "demo", [])
+
+    with pytest.raises(ValueError, match="question cannot be empty"):
+        retrieve(
+            data_dir=tmp_path,
+            project_name="demo",
+            question="   ",
+            embedder=QueryEmbedder([1.0, 0.0]),
+        )
+
+
+@pytest.mark.parametrize("top_k", [0, -1])
+def test_retrieve_rejects_invalid_top_k(tmp_path, top_k):
+    save_chunks(tmp_path, "demo", [])
+
+    with pytest.raises(ValueError, match="top k cannot be less than or equal to zero"):
+        retrieve(
+            data_dir=tmp_path,
+            project_name="demo",
+            question="What parses requests?",
+            embedder=QueryEmbedder([1.0, 0.0]),
+            top_k=top_k,
+        )
+
+
+def test_retrieve_propagates_missing_project_index(tmp_path):
+    with pytest.raises(FileNotFoundError, match="Requested file not found"):
+        retrieve(
+            data_dir=tmp_path,
+            project_name="missing",
+            question="What parses requests?",
+            embedder=QueryEmbedder([1.0, 0.0]),
+        )
+
+
+def test_retrieve_rejects_query_dimension_mismatch(tmp_path):
+    save_chunks(tmp_path, "demo", [make_chunk("best", [1.0, 0.0])])
+
+    with pytest.raises(ValueError, match="same dimension"):
+        retrieve(
+            data_dir=tmp_path,
+            project_name="demo",
+            question="What parses requests?",
+            embedder=QueryEmbedder([1.0, 0.0, 0.0]),
+        )
