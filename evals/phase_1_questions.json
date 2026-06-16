@@ -1,0 +1,57 @@
+{
+  "name": "phase-1-http-go-retrieval",
+  "description": "Live Gemini retrieval evals for the HttpGo repository.",
+  "repo_path": "/Users/akhilnair/Desktop/HttpGo",
+  "project_name": "http-go-eval",
+  "data_dir": "data",
+  "embedder": "gemini",
+  "top_k": 3,
+  "questions": [
+    {
+      "id": "request-partial-reads",
+      "question": "How does RequestFromReader handle partial reads and incomplete requests?",
+      "expected_files": [
+        "internal/request/request.go"
+      ]
+    },
+    {
+      "id": "header-parsing",
+      "question": "How are HTTP headers parsed, normalized, and combined when duplicate headers appear?",
+      "expected_files": [
+        "internal/headers/headers.go",
+        "internal/headers/headers_test.go"
+      ]
+    },
+    {
+      "id": "chunked-response",
+      "question": "How does the response writer send chunked response bodies and trailers?",
+      "expected_files": [
+        "internal/response/response.go"
+      ]
+    },
+    {
+      "id": "server-handler-flow",
+      "question": "How does the server accept TCP connections, parse requests, and pass them to the handler?",
+      "expected_files": [
+        "internal/server/server.go",
+        "internal/request/request.go"
+      ]
+    },
+    {
+      "id": "httpbin-proxy-streaming",
+      "question": "How are /httpbin routes proxied and streamed back using chunked transfer encoding?",
+      "expected_files": [
+        "httpserver/main.go",
+        "internal/response/response.go"
+      ]
+    },
+    {
+      "id": "route-status-responses",
+      "question": "Which routes return 400, 500, or 200 responses, and where are those responses written?",
+      "expected_files": [
+        "httpserver/main.go",
+        "internal/response/response.go"
+      ]
+    }
+  ]
+}
