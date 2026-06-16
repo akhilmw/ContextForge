@@ -12,7 +12,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
-from contextforge.config import PROJECT_NAME_ALLOWED_PATTERN
+from contextforge.config import PROJECT_NAME_ALLOWED_PATTERN, SCHEMA_VERSION
 from contextforge.embedder import validate_embeddings
 from contextforge.models import Chunk
 
@@ -100,3 +100,71 @@ def save_chunks(
                 pass
 
     return target_path
+
+def load_chunks(
+    data_dir: Path,
+    project_name: str,
+) -> list[Chunk]:
+    """Load and validate one project's stored chunk index."""
+
+    if not re.match(PROJECT_NAME_ALLOWED_PATTERN, project_name):
+        raise ValueError("Project name does not match the requirements")
+
+    target_path = data_dir / "projects" / project_name / "chunks.json"
+    if not target_path.exists():
+        raise FileNotFoundError("Requested file not found")
+
+    vectors = []
+    texts = []
+    chunks = []
+    with open(target_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("Stored index must be a JSON object")
+
+        schema_version = data.get("schema_version")
+        if schema_version is None:
+            raise ValueError("Schema Version not present")
+        elif schema_version != SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported schema version: {schema_version}"
+            )
+
+        if data.get("project_name") != project_name:
+            raise ValueError(f"Invalid project name : {project_name}")
+
+        expected_dimension = data.get("embedding_dimension")
+        chunk_dicts = data.get("chunks")
+
+        if not isinstance(chunk_dicts, list):
+            raise ValueError("Stored chunks must be a list")
+
+        if not chunk_dicts:
+            if expected_dimension is not None:
+                raise ValueError("Empty project cannot have an embedding dimension")
+            return []
+
+        if expected_dimension is None:
+            raise ValueError("Non-empty project must have an embedding dimension")
+
+        for chunk_dict in chunk_dicts:
+            chunk = chunk_from_dict(chunk_dict)
+            if chunk.project_name != project_name:
+                raise ValueError(
+                    f"Chunk {chunk.chunk_id} does not belong to {project_name}"
+                )
+
+            if chunk.embedding is None:
+                raise ValueError(f"Chunk {chunk.chunk_id} has no embedding")
+
+            if len(chunk.embedding) != expected_dimension:
+                raise ValueError("Embedding size mismatch")
+
+            texts.append(chunk.content)
+            vectors.append(chunk.embedding)
+            chunks.append(chunk)
+
+    validate_embeddings(texts, vectors)
+
+    return chunks

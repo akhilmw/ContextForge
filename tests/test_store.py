@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from contextforge.models import Chunk
-from contextforge.store import chunk_from_dict, chunk_to_dict, save_chunks
+from contextforge.store import chunk_from_dict, chunk_to_dict, load_chunks, save_chunks
 
 
 def make_chunk(embedding=None):
@@ -278,3 +278,260 @@ def test_saved_chunks_are_valid_json(tmp_path):
         payload = json.load(saved_file)
 
     assert isinstance(payload, dict)
+
+
+def write_index(data_dir, project_name, payload):
+    project_dir = data_dir / "projects" / project_name
+    project_dir.mkdir(parents=True)
+    index_path = project_dir / "chunks.json"
+    index_path.write_text(json.dumps(payload), encoding="utf-8")
+    return index_path
+
+
+def test_load_chunks_round_trips_saved_chunks(tmp_path):
+    chunks = [
+        make_chunk([0.1, 0.2]),
+        Chunk(
+            chunk_id="chunk-2",
+            project_name="demo",
+            file_path="src/second.py",
+            language="python",
+            content="second chunk",
+            start_line=1,
+            end_line=1,
+            embedding=[0.3, 0.4],
+        ),
+    ]
+
+    save_chunks(tmp_path, "demo", chunks)
+    loaded = load_chunks(tmp_path, "demo")
+
+    assert loaded == chunks
+    assert loaded is not chunks
+    assert loaded[0] is not chunks[0]
+
+
+def test_load_chunks_preserves_stored_order(tmp_path):
+    chunks = [
+        make_chunk([0.1, 0.2]),
+        Chunk(
+            chunk_id="chunk-2",
+            project_name="demo",
+            file_path="src/second.py",
+            language="python",
+            content="second chunk",
+            start_line=1,
+            end_line=1,
+            embedding=[0.3, 0.4],
+        ),
+    ]
+
+    save_chunks(tmp_path, "demo", chunks)
+    loaded = load_chunks(tmp_path, "demo")
+
+    assert [chunk.chunk_id for chunk in loaded] == ["chunk-1", "chunk-2"]
+
+
+def test_load_chunks_loads_empty_project(tmp_path):
+    save_chunks(tmp_path, "empty-project", [])
+
+    assert load_chunks(tmp_path, "empty-project") == []
+
+
+def test_load_chunks_raises_for_missing_index(tmp_path):
+    with pytest.raises(FileNotFoundError, match="Requested file not found"):
+        load_chunks(tmp_path, "demo")
+
+
+@pytest.mark.parametrize(
+    "project_name",
+    [
+        "",
+        "   ",
+        ".",
+        "..",
+        "../outside",
+        "nested/project",
+        r"nested\project",
+        "project name",
+    ],
+)
+def test_load_chunks_rejects_invalid_project_names(tmp_path, project_name):
+    with pytest.raises(
+        ValueError,
+        match="Project name does not match the requirements",
+    ):
+        load_chunks(tmp_path, project_name)
+
+
+def test_load_chunks_raises_for_invalid_json(tmp_path):
+    project_dir = tmp_path / "projects" / "demo"
+    project_dir.mkdir(parents=True)
+    (project_dir / "chunks.json").write_text("{invalid json", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_non_object_json_root(tmp_path):
+    write_index(tmp_path, "demo", [])
+
+    with pytest.raises(
+        ValueError,
+        match="Stored index must be a JSON object",
+    ):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_missing_schema_version(tmp_path):
+    payload = {
+        "project_name": "demo",
+        "embedding_dimension": None,
+        "chunks": [],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(ValueError, match="Schema Version not present"):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_unsupported_schema_version(tmp_path):
+    payload = {
+        "schema_version": 2,
+        "project_name": "demo",
+        "embedding_dimension": None,
+        "chunks": [],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(ValueError, match="Unsupported schema version: 2"):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_wrong_project_metadata(tmp_path):
+    payload = {
+        "schema_version": 1,
+        "project_name": "other-project",
+        "embedding_dimension": None,
+        "chunks": [],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(ValueError, match="Invalid project name"):
+        load_chunks(tmp_path, "demo")
+
+
+@pytest.mark.parametrize("chunks_value", [None, {"chunk_id": "chunk-1"}])
+def test_load_chunks_rejects_missing_or_non_list_chunks(tmp_path, chunks_value):
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": None,
+        "chunks": chunks_value,
+    }
+    if chunks_value is None:
+        payload.pop("chunks")
+
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(ValueError, match="Stored chunks must be a list"):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_empty_project_with_dimension(tmp_path):
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": 2,
+        "chunks": [],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(
+        ValueError,
+        match="Empty project cannot have an embedding dimension",
+    ):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_non_empty_project_without_dimension(tmp_path):
+    chunk = make_chunk([0.1, 0.2])
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": None,
+        "chunks": [chunk_to_dict(chunk)],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(
+        ValueError,
+        match="Non-empty project must have an embedding dimension",
+    ):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_chunk_from_different_project(tmp_path):
+    chunk = make_chunk([0.1, 0.2])
+    chunk.project_name = "other-project"
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": 2,
+        "chunks": [chunk_to_dict(chunk)],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(
+        ValueError,
+        match="Chunk chunk-1 does not belong to demo",
+    ):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_chunk_without_embedding(tmp_path):
+    chunk = make_chunk()
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": 2,
+        "chunks": [chunk_to_dict(chunk)],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(ValueError, match="Chunk chunk-1 has no embedding"):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_rejects_embedding_dimension_mismatch(tmp_path):
+    chunk = make_chunk([0.1, 0.2])
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": 3,
+        "chunks": [chunk_to_dict(chunk)],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(ValueError, match="Embedding size mismatch"):
+        load_chunks(tmp_path, "demo")
+
+
+def test_load_chunks_applies_chunk_validation(tmp_path):
+    chunk = make_chunk([0.1, 0.2])
+    chunk_data = chunk_to_dict(chunk)
+    chunk_data["start_line"] = 10
+    chunk_data["end_line"] = 5
+    payload = {
+        "schema_version": 1,
+        "project_name": "demo",
+        "embedding_dimension": 2,
+        "chunks": [chunk_data],
+    }
+    write_index(tmp_path, "demo", payload)
+
+    with pytest.raises(
+        ValueError,
+        match="start line cannot be greater than end line",
+    ):
+        load_chunks(tmp_path, "demo")
