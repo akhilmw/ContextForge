@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 @dataclass
 class Document:
@@ -86,3 +87,12 @@ class Answer:
 
     text: str
     sources: list[Source]
+
+@dataclass
+class IngestionResult:
+    project_name: str
+    files_discovered: int
+    documents_loaded: int
+    chunks_created: int
+    chunks_saved: int
+    index_path: Path
