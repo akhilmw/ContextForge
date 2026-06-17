@@ -9,8 +9,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from contextforge.embedder import FakeEmbedder, GeminiEmbedder
+from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.retriever import retrieve
+
+
+def make_embedder(name: str):
+    """Create the configured embedding provider for CLI usage."""
+    if name == "gemini":
+        return GeminiEmbedder()
+    if name == "openai":
+        return OpenAIEmbedder()
+    return FakeEmbedder()
 
 
 def main():
@@ -47,13 +56,13 @@ def main():
         "--embedder",
         type=str,
         default="fake",
-        choices=["fake", "gemini"],
+        choices=["fake", "gemini", "openai"],
         help="The embedding model type to use",
     )
 
     args = parser.parse_args()
 
-    embedder = GeminiEmbedder() if args.embedder == "gemini" else FakeEmbedder()
+    embedder = make_embedder(args.embedder)
     results = retrieve(
         data_dir=Path(args.data_dir),
         project_name=args.project,

@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from contextforge.embedder import FakeEmbedder, GeminiEmbedder
+from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.ingest import ingest_repository
 from contextforge.retriever import retrieve
 
@@ -25,6 +25,8 @@ def make_embedder(name: str):
     """Create the configured embedding provider."""
     if name == "gemini":
         return GeminiEmbedder()
+    if name == "openai":
+        return OpenAIEmbedder()
     if name == "fake":
         return FakeEmbedder()
     raise ValueError(f"Unsupported embedder: {name}")

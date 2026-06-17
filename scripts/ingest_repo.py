@@ -11,7 +11,16 @@ SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from contextforge.ingest import ingest_repository
-from contextforge.embedder import FakeEmbedder, GeminiEmbedder
+from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
+
+
+def make_embedder(name: str):
+    """Create the configured embedding provider for CLI usage."""
+    if name == "gemini":
+        return GeminiEmbedder()
+    if name == "openai":
+        return OpenAIEmbedder()
+    return FakeEmbedder()
 
 
 def main():
@@ -42,14 +51,14 @@ def main():
         "--embedder",
         type=str,
         default="fake",
-        choices=["fake", "gemini"],
+        choices=["fake", "gemini", "openai"],
         help="The embedding model type to use"
     )
 
     args = parser.parse_args()
 
     # Keep provider choice at the edge; ingestion only receives an Embedder.
-    embedder = GeminiEmbedder() if args.embedder == "gemini" else FakeEmbedder()
+    embedder = make_embedder(args.embedder)
     repo_path = Path(args.path)
     data_dir = Path(args.data_dir)
 

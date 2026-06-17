@@ -11,11 +11,11 @@ Phase 1 supports:
 - local repository ingestion
 - file discovery and UTF-8 loading
 - line-based chunking with source metadata
-- Gemini or fake embeddings
+- Gemini, OpenAI, or fake embeddings
 - local JSON chunk indexes
 - cosine-similarity retrieval
 - grounded prompt construction
-- Gemini or fake LLM answers
+- Gemini, OpenAI, or fake LLM answers
 - source citations with file paths and line ranges
 - repeatable retrieval evals
 
@@ -37,6 +37,7 @@ Set your Gemini key:
 
 ```bash
 GEMINI_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
 ```
 
 ## Ingest A Repository
@@ -49,6 +50,16 @@ uv run python scripts/ingest_repo.py \
   --name http-go-eval \
   --data-dir data \
   --embedder gemini
+```
+
+Use OpenAI instead:
+
+```bash
+uv run python scripts/ingest_repo.py \
+  --path /Users/akhilnair/Desktop/HttpGo \
+  --name http-go-openai \
+  --data-dir data \
+  --embedder openai
 ```
 
 This creates:
@@ -86,6 +97,18 @@ uv run python scripts/ask.py \
 
 The output includes the generated answer followed by source citations.
 
+OpenAI version:
+
+```bash
+uv run python scripts/ask.py \
+  --project http-go-openai \
+  --data-dir data \
+  --question "How does RequestFromReader handle partial reads and incomplete requests?" \
+  --top-k 3 \
+  --embedder openai \
+  --llm openai
+```
+
 ## Run Retrieval Evals
 
 Run against an existing ingested index:
@@ -116,7 +139,7 @@ uv run pytest -q
 ```
 
 The fake embedder is deterministic but not semantically meaningful. Use Gemini
-for realistic retrieval behavior.
+or OpenAI for realistic retrieval behavior.
 
 ## Current Limitations
 

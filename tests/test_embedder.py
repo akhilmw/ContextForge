@@ -8,6 +8,7 @@ import pytest
 from contextforge.embedder import (
     FakeEmbedder,
     GeminiEmbedder,
+    OpenAIEmbedder,
     embed_chunks,
     validate_embeddings,
 )
@@ -42,6 +43,23 @@ def make_gemini_response(vectors):
     return SimpleNamespace(
         embeddings=[
             SimpleNamespace(values=vector)
+            for vector in vectors
+        ],
+    )
+
+
+def make_openai_embedder(client, model="text-embedding-3-small"):
+    embedder = object.__new__(OpenAIEmbedder)
+    embedder.api_key = "test-api-key"
+    embedder.client = client
+    embedder.model = model
+    return embedder
+
+
+def make_openai_response(vectors):
+    return SimpleNamespace(
+        data=[
+            SimpleNamespace(embedding=vector)
             for vector in vectors
         ],
     )
@@ -321,3 +339,85 @@ def test_gemini_embedder_live_api():
     assert len(document_vectors) == 2
     assert all(len(vector) == 768 for vector in document_vectors)
     assert len(query_vector) == 768
+
+
+def test_openai_embedder_returns_empty_list_without_calling_api():
+    client = Mock()
+    embedder = make_openai_embedder(client)
+
+    assert embedder.embed_documents([]) == []
+    client.embeddings.create.assert_not_called()
+
+
+def test_openai_embedder_embeds_documents():
+    client = Mock()
+    client.embeddings.create.return_value = make_openai_response(
+        [[0.1, 0.2], [0.3, 0.4]],
+    )
+    embedder = make_openai_embedder(client)
+    texts = ["first document", "second document"]
+
+    vectors = embedder.embed_documents(texts)
+
+    assert vectors == [[0.1, 0.2], [0.3, 0.4]]
+    call = client.embeddings.create.call_args
+    assert call.kwargs["model"] == "text-embedding-3-small"
+    assert call.kwargs["input"] == texts
+
+
+def test_openai_embedder_embeds_query():
+    client = Mock()
+    client.embeddings.create.return_value = make_openai_response(
+        [[0.1, 0.2]],
+    )
+    embedder = make_openai_embedder(client)
+
+    vector = embedder.embed_query("How is the request parsed?")
+
+    assert vector == [0.1, 0.2]
+    call = client.embeddings.create.call_args
+    assert call.kwargs["model"] == "text-embedding-3-small"
+    assert call.kwargs["input"] == ["How is the request parsed?"]
+
+
+@pytest.mark.parametrize("text", ["", "   "])
+def test_openai_embedder_rejects_empty_query_without_calling_api(text):
+    client = Mock()
+    embedder = make_openai_embedder(client)
+
+    with pytest.raises(ValueError, match="Query text cannot be empty"):
+        embedder.embed_query(text)
+
+    client.embeddings.create.assert_not_called()
+
+
+def test_openai_embedder_validates_document_response():
+    client = Mock()
+    client.embeddings.create.return_value = make_openai_response(
+        [[0.1, 0.2]],
+    )
+    embedder = make_openai_embedder(client)
+
+    with pytest.raises(
+        ValueError,
+        match="Expected 2 vectors, received 1",
+    ):
+        embedder.embed_documents(["first", "second"])
+
+
+def test_openai_embedder_validates_query_response():
+    client = Mock()
+    client.embeddings.create.return_value = make_openai_response(
+        [[math.nan]],
+    )
+    embedder = make_openai_embedder(client)
+
+    with pytest.raises(TypeError, match="Embedding values must be numeric"):
+        embedder.embed_query("question")
+
+
+def test_openai_embedder_requires_api_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="Could not fetch the OpenAI API Key"):
+        OpenAIEmbedder()

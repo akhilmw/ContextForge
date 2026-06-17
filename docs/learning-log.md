@@ -13,11 +13,11 @@ The completed pipeline can:
 - discover supported files in a local repository
 - load files as text documents
 - split documents into source-aware chunks
-- embed chunks with Gemini or a deterministic fake embedder
+- embed chunks with Gemini, OpenAI, or a deterministic fake embedder
 - save chunks and embeddings into a local JSON index
 - retrieve top-k chunks with cosine similarity
 - build a grounded prompt with source labels
-- generate an answer with Gemini or a fake LLM
+- generate an answer with Gemini, OpenAI, or a fake LLM
 - return file and line citations
 - run repeatable retrieval evals
 
@@ -49,8 +49,8 @@ counts, dimensions, and numeric values so a bad provider response cannot silentl
 corrupt storage or retrieval.
 
 Fake providers are not shortcuts. They let the pipeline be tested without
-network access, API quota, or nondeterministic model output. Gemini is used for
-real behavior; fakes are used for reliable tests.
+network access, API quota, or nondeterministic model output. Gemini and OpenAI
+are used for real behavior; fakes are used for reliable tests.
 
 Retrieval and answering are separate responsibilities. Retrieval finds evidence.
 Prompt building formats that evidence. The LLM answers only from that supplied

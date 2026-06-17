@@ -1,8 +1,8 @@
 """Generate final answers from grounded prompts.
 
 The LLM protocol keeps the ask pipeline independent from a specific provider.
-FakeLLM supports deterministic tests, while GeminiLLM calls the real Gemini
-generation API for end-to-end usage.
+FakeLLM supports deterministic tests, while GeminiLLM and OpenAILLM call real
+generation APIs for end-to-end usage.
 """
 
 import os
@@ -10,6 +10,7 @@ from typing import Protocol
 
 from dotenv import load_dotenv
 from google import genai
+from openai import OpenAI
 
 load_dotenv()
 
@@ -59,3 +60,29 @@ class GeminiLLM:
         if not response.text:
             raise ValueError("Gemini returned an empty response")
         return response.text
+
+
+class OpenAILLM:
+    """OpenAI-backed LLM provider for real answer generation."""
+
+    def __init__(self, model: str = "gpt-5.4-mini"):
+        """Create an OpenAI client using the API key from the environment."""
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("Could not fetch the OpenAI API Key")
+        self.model = model
+        self.client = OpenAI(api_key=self.api_key)
+
+    def generate(self, prompt: str) -> str:
+        """Send one grounded prompt to OpenAI and return the generated text."""
+        if not prompt.strip():
+            raise ValueError("prompt cannot be empty")
+
+        response = self.client.responses.create(
+            model=self.model,
+            input=prompt,
+        )
+
+        if not response.output_text:
+            raise ValueError("OpenAI returned an empty response")
+        return response.output_text

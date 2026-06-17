@@ -5,6 +5,7 @@ description = "A learning-first developer operations RAG system"
 requires-python = ">=3.11"
 dependencies = [
     "google-genai>=2.8.0",
+    "openai>=2.42.0",
     "python-dotenv>=1.2.2",
 ]
 

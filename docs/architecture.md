@@ -32,7 +32,7 @@ Responsibilities:
 - `discovery.py` finds supported files and skips ignored directories.
 - `loaders.py` reads repository-relative files as UTF-8 text.
 - `chunker.py` creates line-based chunks with stable IDs and line ranges.
-- `embedder.py` attaches vectors through a fake or Gemini provider.
+- `embedder.py` attaches vectors through a fake, Gemini, or OpenAI provider.
 - `store.py` writes a project-specific JSON index atomically.
 - `ingest.py` coordinates the whole ingestion flow.
 - `scripts/ingest_repo.py` exposes ingestion through the terminal.
@@ -89,14 +89,16 @@ retrieval or from the LLM generation step.
 ## Provider Boundaries
 
 `Embedder` and `LLM` are protocols. The rest of the system depends on their
-interfaces, not concrete Gemini classes.
+interfaces, not concrete provider classes.
 
 Current providers:
 
 - `FakeEmbedder`: deterministic vectors for tests.
 - `GeminiEmbedder`: live Gemini embeddings for real retrieval.
+- `OpenAIEmbedder`: live OpenAI embeddings for real retrieval.
 - `FakeLLM`: deterministic answer text for tests.
 - `GeminiLLM`: live Gemini generation for real answers.
+- `OpenAILLM`: live OpenAI generation for real answers.
 
 ## Storage Layout
 

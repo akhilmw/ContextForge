@@ -10,8 +10,26 @@ SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from contextforge.ask import ask_question
-from contextforge.embedder import FakeEmbedder, GeminiEmbedder
-from contextforge.llm import FakeLLM, GeminiLLM
+from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
+from contextforge.llm import FakeLLM, GeminiLLM, OpenAILLM
+
+
+def make_embedder(name: str):
+    """Create the configured embedding provider for CLI usage."""
+    if name == "gemini":
+        return GeminiEmbedder()
+    if name == "openai":
+        return OpenAIEmbedder()
+    return FakeEmbedder()
+
+
+def make_llm(name: str):
+    """Create the configured answer-generation provider for CLI usage."""
+    if name == "gemini":
+        return GeminiLLM()
+    if name == "openai":
+        return OpenAILLM()
+    return FakeLLM("I do not have enough evidence to answer.")
 
 
 def main():
@@ -48,14 +66,14 @@ def main():
         "--embedder",
         type=str,
         default="fake",
-        choices=["fake", "gemini"],
+        choices=["fake", "gemini", "openai"],
         help="The embedding model type to use",
     )
     parser.add_argument(
         "--llm",
         type=str,
         default="fake",
-        choices=["fake", "gemini"],
+        choices=["fake", "gemini", "openai"],
         help="The answer-generation model type to use",
     )
 
@@ -63,12 +81,8 @@ def main():
 
     # Keep provider selection at the CLI edge; ask_question only receives
     # provider protocols and stays independent from concrete implementations.
-    embedder = GeminiEmbedder() if args.embedder == "gemini" else FakeEmbedder()
-    llm = (
-        GeminiLLM()
-        if args.llm == "gemini"
-        else FakeLLM("I do not have enough evidence to answer.")
-    )
+    embedder = make_embedder(args.embedder)
+    llm = make_llm(args.llm)
 
     answer = ask_question(
         data_dir=Path(args.data_dir),

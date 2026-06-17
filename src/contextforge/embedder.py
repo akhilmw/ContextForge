@@ -1,8 +1,8 @@
 """Generate and validate vectors for chunks and user questions.
 
 The Embedder protocol keeps the ingestion and retrieval pipelines independent
-of a specific provider. Gemini supplies real semantic vectors, while the fake
-implementation keeps unit tests deterministic and offline.
+of a specific provider. Gemini and OpenAI supply real semantic vectors, while
+the fake implementation keeps unit tests deterministic and offline.
 """
 
 import math
@@ -12,6 +12,7 @@ from typing import Protocol
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from openai import OpenAI
 
 from contextforge.models import Chunk
 
@@ -83,6 +84,49 @@ class GeminiEmbedder:
             ),
         )
         vector = response.embeddings[0].values
+        validate_embeddings([text], [vector])
+        return vector
+
+
+class OpenAIEmbedder:
+    """OpenAI-backed embedding provider for document retrieval."""
+
+    def __init__(self, model: str = "text-embedding-3-small"):
+        """Create an OpenAI client using the API key from the environment."""
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("Could not fetch the OpenAI API Key")
+        self.model = model
+        self.client = OpenAI(api_key=self.api_key)
+
+    def embed_documents(
+        self,
+        texts: list[str],
+    ) -> list[list[float]]:
+        """Embed document text for storage and later semantic retrieval."""
+        if not texts:
+            return []
+
+        response = self.client.embeddings.create(
+            model=self.model,
+            input=texts,
+        )
+
+        vectors = [item.embedding for item in response.data]
+        validate_embeddings(texts, vectors)
+        return vectors
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed one user question for comparison with document vectors."""
+        if not text.strip():
+            raise ValueError("Query text cannot be empty")
+
+        response = self.client.embeddings.create(
+            model=self.model,
+            input=[text],
+        )
+
+        vector = response.data[0].embedding
         validate_embeddings([text], [vector])
         return vector
 
