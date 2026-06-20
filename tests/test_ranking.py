@@ -1,9 +1,10 @@
-from contextforge.models import Chunk, SearchResult
 import pytest
 
+from contextforge.models import Chunk, SearchResult
 from contextforge.ranking import (
     deduplicate_overlapping_results,
     deduplicate_results,
+    limit_results_per_file,
     line_overlap_ratio,
 )
 
@@ -194,3 +195,54 @@ def test_deduplicate_overlapping_results_rejects_non_numeric_threshold(
 ):
     with pytest.raises(TypeError, match="is not of type numeric"):
         deduplicate_overlapping_results([], threshold)
+
+
+def test_limit_results_per_file_returns_empty_list_for_empty_input():
+    assert limit_results_per_file([], max_per_file=1) == []
+
+
+def test_limit_results_per_file_keeps_one_result_from_each_file():
+    first_a = make_result("a-1", 0.9, "src/a.py")
+    second_a = make_result("a-2", 0.8, "src/a.py")
+    first_b = make_result("b-1", 0.7, "src/b.py")
+
+    assert limit_results_per_file([first_a, second_a, first_b], 1) == [
+        first_a,
+        first_b,
+    ]
+
+
+def test_limit_results_per_file_keeps_configured_number_per_file():
+    first_a = make_result("a-1", 0.9, "src/a.py")
+    first_b = make_result("b-1", 0.8, "src/b.py")
+    second_a = make_result("a-2", 0.7, "src/a.py")
+    third_a = make_result("a-3", 0.6, "src/a.py")
+    second_b = make_result("b-2", 0.5, "src/b.py")
+
+    assert limit_results_per_file(
+        [first_a, first_b, second_a, third_a, second_b],
+        2,
+    ) == [first_a, first_b, second_a, second_b]
+
+
+def test_limit_results_per_file_preserves_input_list():
+    first = make_result("a-1", 0.9, "src/a.py")
+    second = make_result("a-2", 0.8, "src/a.py")
+    results = [first, second]
+    original_results = results.copy()
+
+    limit_results_per_file(results, 1)
+
+    assert results == original_results
+
+
+@pytest.mark.parametrize("max_per_file", [True, False, 1.5, "1"])
+def test_limit_results_per_file_rejects_non_integer_limit(max_per_file):
+    with pytest.raises(TypeError, match="is not of type int"):
+        limit_results_per_file([], max_per_file)
+
+
+@pytest.mark.parametrize("max_per_file", [0, -1])
+def test_limit_results_per_file_rejects_non_positive_limit(max_per_file):
+    with pytest.raises(ValueError, match="should be a positive integer"):
+        limit_results_per_file([], max_per_file)

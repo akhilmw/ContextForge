@@ -50,11 +50,14 @@ Completed:
 - Candidate overfetching before final top-k selection
 - Semantic and deduplicated evaluator strategies
 - Deduplication experiments at thresholds 0.50 and 0.25
+- Configurable per-file source diversity
+- Diverse evaluator strategy
+- Source-diversity experiments at limits 1 and 2
 
 Next:
 
-- Add configurable source diversity
-- Measure whether source diversity improves the baseline
+- Implement BM25 keyword retrieval
+- Compare keyword-only retrieval with semantic retrieval
 
 ## Phase Boundaries
 

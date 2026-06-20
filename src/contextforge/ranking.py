@@ -1,5 +1,7 @@
 """Post-process ranked retrieval candidates without changing their scores."""
 
+from collections import defaultdict
+
 from contextforge.models import Chunk, SearchResult
 
 
@@ -64,3 +66,31 @@ def deduplicate_overlapping_results(
             kept.append(candidate)
 
     return kept
+
+
+def limit_results_per_file(
+    results: list[SearchResult],
+    max_per_file: int,
+) -> list[SearchResult]:
+    """Keep at most the configured number of ranked chunks from each file."""
+
+    if isinstance(max_per_file, bool) or not isinstance(max_per_file, int):
+        raise TypeError(f"{max_per_file} is not of type int")
+
+    if max_per_file <= 0:
+        raise ValueError("max_per_file should be a positive integer")
+
+    if not results:
+        return []
+
+    # Counts are independent per path, while input order preserves ranking.
+    count_per_file: defaultdict[str, int] = defaultdict(int)
+
+    final_results: list[SearchResult] = []
+    for result in results:
+        file_path = result.chunk.file_path
+        if count_per_file[file_path] < max_per_file:
+            final_results.append(result)
+            count_per_file[file_path] += 1
+
+    return final_results

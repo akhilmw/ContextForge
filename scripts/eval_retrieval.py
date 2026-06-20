@@ -13,7 +13,7 @@ sys.path.insert(0, str(SRC_DIR))
 from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.evaluation import evaluate_case, summarize_results
 from contextforge.ingest import ingest_repository
-from contextforge.retriever import retrieve, retrieve_deduplicated
+from contextforge.retriever import retrieve, retrieve_deduplicated, retrieve_diverse
 
 
 def load_eval_config(eval_file: Path) -> dict:
@@ -51,7 +51,7 @@ def main():
     )
     parser.add_argument(
         "--strategy",
-        choices=("semantic", "deduplicated"),
+        choices=("semantic", "deduplicated", "diverse"),
         default="semantic",
         help="Retrieval strategy to evaluate (default: semantic)",
     )
@@ -66,6 +66,12 @@ def main():
         type=float,
         default=0.5,
         help="Overlap ratio removed by deduplicated retrieval (default: 0.5)",
+    )
+    parser.add_argument(
+        "--max-per-file",
+        type=int,
+        default=1,
+        help="Maximum final candidates retained per file (default: 1)",
     )
 
     args = parser.parse_args()
@@ -97,9 +103,11 @@ def main():
     print(f"Embedder: {embedder_name}")
     print(f"Strategy: {args.strategy}")
     print(f"Top K: {top_k}")
-    if args.strategy == "deduplicated":
+    if args.strategy in ("deduplicated", "diverse"):
         print(f"Candidate K: {args.candidate_k}")
         print(f"Overlap threshold: {args.overlap_threshold}")
+    if args.strategy == "diverse":
+        print(f"Max per file: {args.max_per_file}")
     print()
 
     # Keep each result so run-level metrics can be calculated after retrieval.
@@ -117,6 +125,13 @@ def main():
                 **retrieval_args,
                 candidate_k=args.candidate_k,
                 overlap_threshold=args.overlap_threshold,
+            )
+        elif args.strategy == "diverse":
+            results = retrieve_diverse(
+                **retrieval_args,
+                candidate_k=args.candidate_k,
+                overlap_threshold=args.overlap_threshold,
+                max_per_file=args.max_per_file,
             )
         else:
             results = retrieve(**retrieval_args)

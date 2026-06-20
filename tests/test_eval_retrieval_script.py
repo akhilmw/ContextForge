@@ -138,6 +138,41 @@ def test_eval_retrieval_script_runs_deduplicated_strategy(tmp_path):
     assert "PASS sample-question" in result.stdout
 
 
+def test_eval_retrieval_script_runs_diverse_strategy(tmp_path):
+    data_dir = tmp_path / "data"
+    ingest_repository(
+        repo_path=SAMPLE_REPO,
+        project_name="demo",
+        data_dir=data_dir,
+        embedder=FakeEmbedder(),
+    )
+    eval_file = write_eval_file(
+        tmp_path,
+        data_dir,
+        ["docs/architecture.md", "notes/debug.txt"],
+    )
+
+    result = run_script(
+        "--eval-file",
+        str(eval_file),
+        "--strategy",
+        "diverse",
+        "--candidate-k",
+        "5",
+        "--overlap-threshold",
+        "0.6",
+        "--max-per-file",
+        "2",
+    )
+
+    assert result.returncode == 0
+    assert "Strategy: diverse" in result.stdout
+    assert "Candidate K: 5" in result.stdout
+    assert "Overlap threshold: 0.6" in result.stdout
+    assert "Max per file: 2" in result.stdout
+    assert "PASS sample-question" in result.stdout
+
+
 def test_eval_retrieval_script_rejects_unknown_strategy():
     result = run_script(
         "--eval-file",

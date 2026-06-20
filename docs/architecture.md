@@ -93,7 +93,7 @@ the evaluation subsystem.
 ## Phase 2 Retrieval Strategies
 
 The original `retrieve()` function remains the semantic baseline.
-`retrieve_deduplicated()` is a separate strategy:
+`retrieve_deduplicated()` and `retrieve_diverse()` are separate strategies:
 
 ```text
 Question
@@ -104,9 +104,16 @@ Question
 ```
 
 Keeping both functions allows the evaluator to compare changes without moving
-the baseline. The evaluator selects them with `--strategy semantic` or
-`--strategy deduplicated` and records candidate count and overlap threshold for
-reproducibility.
+the baseline. Diverse retrieval adds one stage after overlap removal:
+
+```text
+deduplicated candidates
+  -> retain at most max_per_file chunks from each path
+  -> return final top_k results
+```
+
+The evaluator selects `semantic`, `deduplicated`, or `diverse` and records the
+candidate count, overlap threshold, and per-file limit for reproducibility.
 
 ## Core Data Models
 

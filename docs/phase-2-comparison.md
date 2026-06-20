@@ -78,3 +78,26 @@ Overlap deduplication correctly retained them, which means this failure is not
 an exact-duplicate or line-overlap problem. The next experiment should limit
 how many initial results one file can occupy while still allowing a configurable
 number of useful same-file chunks.
+
+## Experiment 2 - Source Diversity
+
+The second experiment kept the same 15 semantic candidates and 0.25 overlap
+threshold, then limited how many chunks from one file could occupy the final
+ranking.
+
+Results:
+
+| Strategy | Max per File | Hit Rate@3 | MRR |
+|---|---:|---:|---:|
+| Semantic baseline | Unlimited | 0.6667 | 0.5000 |
+| Diverse | 1 | **0.8333** | **0.5833** |
+| Diverse | 2 | 0.8333 | 0.5556 |
+
+Both limits improved the result from `4/6` to `5/6`. Limiting each file to one
+result recovered `httpbin-proxy-streaming` by promoting `httpserver/main.go`
+into the top three. It also produced the stronger MRR because relevant sources
+appeared earlier on average.
+
+`chunked-response` still failed. Source diversity solved one ranking-capacity
+problem, but it cannot make a weakly ranked exact implementation file relevant.
+The next experiment will add BM25 keyword retrieval before hybrid rank fusion.

@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from contextforge.models import Chunk, SearchResult
-from contextforge.retriever import cosine_similarity, retrieve, retrieve_deduplicated
+from contextforge.retriever import (
+    cosine_similarity,
+    retrieve,
+    retrieve_deduplicated,
+    retrieve_diverse,
+)
 from contextforge.store import save_chunks
 
 
@@ -324,4 +329,103 @@ def test_retrieve_deduplicated_rejects_invalid_overlap_threshold(
             "question",
             QueryEmbedder([1.0, 0.0]),
             overlap_threshold=threshold,
+        )
+
+
+def test_retrieve_diverse_promotes_result_from_another_file(tmp_path):
+    chunks = [
+        make_chunk(
+            "a-first", [1.0, 0.0], file_path="src/a.py", start_line=1, end_line=10
+        ),
+        make_chunk(
+            "a-second",
+            [0.9, 0.1],
+            file_path="src/a.py",
+            start_line=11,
+            end_line=20,
+        ),
+        make_chunk("b-first", [0.8, 0.2], file_path="src/b.py"),
+    ]
+    save_chunks(tmp_path, "demo", chunks)
+
+    results = retrieve_diverse(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+        top_k=2,
+        candidate_k=3,
+        max_per_file=1,
+    )
+
+    assert [result.chunk.chunk_id for result in results] == ["a-first", "b-first"]
+
+
+def test_retrieve_diverse_allows_configured_results_per_file(tmp_path):
+    chunks = [
+        make_chunk(
+            "a-first", [1.0, 0.0], file_path="src/a.py", start_line=1, end_line=10
+        ),
+        make_chunk(
+            "a-second",
+            [0.9, 0.1],
+            file_path="src/a.py",
+            start_line=11,
+            end_line=20,
+        ),
+        make_chunk("b-first", [0.8, 0.2], file_path="src/b.py"),
+    ]
+    save_chunks(tmp_path, "demo", chunks)
+
+    results = retrieve_diverse(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+        top_k=3,
+        candidate_k=3,
+        max_per_file=2,
+    )
+
+    assert [result.chunk.chunk_id for result in results] == [
+        "a-first",
+        "a-second",
+        "b-first",
+    ]
+
+
+def test_retrieve_diverse_returns_empty_list_for_empty_project(tmp_path):
+    save_chunks(tmp_path, "demo", [])
+
+    results = retrieve_diverse(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="What parses requests?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+    )
+
+    assert results == []
+
+
+@pytest.mark.parametrize("max_per_file", [True, 1.5, "1"])
+def test_retrieve_diverse_rejects_non_integer_file_limit(tmp_path, max_per_file):
+    with pytest.raises(TypeError, match="is not of type int"):
+        retrieve_diverse(
+            tmp_path,
+            "demo",
+            "question",
+            QueryEmbedder([1.0, 0.0]),
+            max_per_file=max_per_file,
+        )
+
+
+@pytest.mark.parametrize("max_per_file", [0, -1])
+def test_retrieve_diverse_rejects_non_positive_file_limit(tmp_path, max_per_file):
+    with pytest.raises(ValueError, match="max_per_file cannot"):
+        retrieve_diverse(
+            tmp_path,
+            "demo",
+            "question",
+            QueryEmbedder([1.0, 0.0]),
+            max_per_file=max_per_file,
         )

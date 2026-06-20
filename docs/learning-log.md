@@ -152,3 +152,25 @@ The distinction is important: overlap deduplication asks whether two chunks
 repeat the same source lines, while source diversity asks whether one file is
 consuming too many result positions. The next experiment targets source
 diversity rather than weakening the overlap threshold further.
+
+### Source Diversity Experiment
+
+Source diversity limits how many chunks from one file may occupy the final
+ranking. Unlike overlap deduplication, it can promote another file even when
+the original same-file chunks contain completely different source lines.
+
+Results:
+
+```text
+Max per file 1: 5/6, Hit Rate@3 0.8333, MRR 0.5833
+Max per file 2: 5/6, Hit Rate@3 0.8333, MRR 0.5556
+```
+
+The limit of one performed best and recovered the `httpbin-proxy-streaming`
+case. This demonstrates the tradeoff: semantic score alone can over-allocate a
+small context budget to one source, while a diversity constraint increases
+evidence coverage.
+
+The remaining `chunked-response` failure suggests that post-processing alone is
+not enough. BM25 keyword retrieval is the next experiment because exact code
+terms and implementation paths may be underweighted by embeddings.
