@@ -67,6 +67,8 @@ def test_eval_retrieval_script_reports_pass(tmp_path):
     assert "Eval: test-eval" in result.stdout
     assert "PASS sample-question" in result.stdout
     assert "Summary: 1/1 passed" in result.stdout
+    assert "Hit Rate@3: 1.0000" in result.stdout
+    assert "MRR: 1.0000" in result.stdout
 
 
 def test_eval_retrieval_script_reports_fail_with_nonzero_exit(tmp_path):
@@ -84,6 +86,8 @@ def test_eval_retrieval_script_reports_fail_with_nonzero_exit(tmp_path):
     assert result.returncode == 1
     assert "FAIL sample-question" in result.stdout
     assert "Summary: 0/1 passed" in result.stdout
+    assert "Hit Rate@3: 0.0000" in result.stdout
+    assert "MRR: 0.0000" in result.stdout
 
 
 def test_eval_retrieval_script_can_ingest_before_eval(tmp_path):

@@ -65,16 +65,30 @@ Responsibilities:
 ## Evaluation Pipeline
 
 ```text
-evals/phase_1_questions.json
+Evaluation JSON
   -> scripts/eval_retrieval.py
   -> retriever.retrieve()
-  -> compare retrieved files with expected_files
-  -> PASS/FAIL summary
+  -> evaluation.evaluate_case()
+  -> first relevant rank per question
+  -> evaluation.summarize_results()
+  -> PASS/FAIL, Hit Rate@K, and MRR
 ```
 
-The Phase 1 eval measures retrieval only. It does not grade generated answers.
-That separation makes it easier to tell whether a bad answer came from poor
-retrieval or from the LLM generation step.
+Evaluation measures retrieval only; it does not grade generated answers. That
+separation makes it easier to tell whether a bad answer came from missing
+evidence or from the LLM generation step.
+
+Phase 2 adds deterministic metrics in `evaluation.py`:
+
+- first relevant rank records where the first expected source appeared
+- reciprocal rank rewards relevant sources near the top
+- Hit Rate@K measures the fraction of questions with a relevant result by k
+- mean reciprocal rank measures average first-result ranking quality
+
+`EvaluationCaseResult` owns one question's ranked outcome, while
+`EvaluationSummary` owns aggregate metrics for a complete run. These evaluation
+types remain outside the core application models because they belong only to
+the evaluation subsystem.
 
 ## Core Data Models
 

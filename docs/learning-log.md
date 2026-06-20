@@ -91,3 +91,42 @@ Phase 2 should improve retrieval quality before adding agent behavior:
 - add hybrid keyword plus vector retrieval
 - add structured eval metrics beyond pass/fail
 - consider reranking after initial top-k retrieval
+
+## Phase 2 - Retrieval Quality
+
+### Evaluation Foundation
+
+Phase 2 started by building a better scoreboard before changing retrieval. A
+pass/fail metric only reveals whether an expected source appeared somewhere in
+the result limit. It does not distinguish a relevant source at rank 1 from one
+at rank 3.
+
+The evaluation module now calculates:
+
+- first relevant rank for each question
+- reciprocal rank for each question
+- Hit@K and aggregate Hit Rate@K
+- mean reciprocal rank across an evaluation run
+
+The metric functions are provider-independent and deterministic. They operate
+on ranked file paths and expected file paths, so they can compare semantic,
+keyword, hybrid, reranked, and LangChain retrieval using the same contract.
+
+### OpenAI Baseline
+
+The unchanged Phase 1 semantic retriever produced this baseline on the six
+HttpGo questions at top-k 3:
+
+```text
+Summary: 4/6 passed
+Hit Rate@3: 0.6667
+MRR: 0.5000
+```
+
+MRR added information that pass/fail did not: two successful questions found
+their first expected file at rank 2 rather than rank 1. The failures also made
+the next retrieval problems concrete: repeated README chunks, repeated chunks
+from one file, and test files outranking implementation files.
+
+The next experiments can now be accepted or rejected using measured changes
+rather than intuition.

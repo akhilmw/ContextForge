@@ -13,6 +13,7 @@ sys.path.insert(0, str(SRC_DIR))
 from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.ingest import ingest_repository
 from contextforge.retriever import retrieve
+from contextforge.evaluation import evaluate_case, summarize_results
 
 
 def load_eval_config(eval_file: Path) -> dict:
@@ -79,6 +80,8 @@ def main():
     print(f"Top K: {top_k}")
     print()
 
+    # Keep each result so run-level metrics can be calculated after retrieval.
+    case_results = []
     for item in questions:
         results = retrieve(
             data_dir=data_dir,
@@ -90,7 +93,16 @@ def main():
 
         retrieved_files = [result.chunk.file_path for result in results]
         expected_files = item["expected_files"]
-        hit = any(file_path in retrieved_files for file_path in expected_files)
+        case_result = evaluate_case(
+            question_id=item["id"],
+            retrieved_files=retrieved_files,
+            expected_files=expected_files,
+        )
+        case_results.append(case_result)
+        hit = (
+            case_result.first_relevant_rank is not None
+            and case_result.first_relevant_rank <= top_k
+        )
 
         if hit:
             passed += 1
@@ -101,7 +113,11 @@ def main():
         print(f"  got: {retrieved_files}")
         print()
 
+    # Hit rate measures success frequency; MRR rewards earlier relevant results.
+    summary = summarize_results(case_results, k=top_k)
     print(f"Summary: {passed}/{total} passed")
+    print(f"Hit Rate@{top_k}: {summary.hit_rate:.4f}")
+    print(f"MRR: {summary.mrr:.4f}")
 
     if passed != total:
         raise SystemExit(1)
