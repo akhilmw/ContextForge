@@ -130,3 +130,25 @@ from one file, and test files outranking implementation files.
 
 The next experiments can now be accepted or rejected using measured changes
 rather than intuition.
+
+### Overlap Deduplication Experiment
+
+The first improvement overfetched semantic candidates before removing exact
+chunk IDs and overlapping line ranges. Overfetching matters because filtering
+only the original top 3 could leave fewer than three final results.
+
+Two overlap thresholds were evaluated:
+
+```text
+Threshold 0.50: Hit Rate@3 0.6667, MRR 0.5000
+Threshold 0.25: Hit Rate@3 0.6667, MRR 0.5000
+```
+
+Neither improved the `4/6` baseline. This was still useful evidence. Adjacent
+20-line chunks share 5 lines, giving an overlap ratio of 0.25, but the repeated
+README results were generally separate sections rather than overlapping chunks.
+
+The distinction is important: overlap deduplication asks whether two chunks
+repeat the same source lines, while source diversity asks whether one file is
+consuming too many result positions. The next experiment targets source
+diversity rather than weakening the overlap threshold further.

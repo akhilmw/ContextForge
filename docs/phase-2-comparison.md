@@ -53,3 +53,28 @@ FAIL httpbin-proxy-streaming
 These observations define the retrieval problems Phase 2 experiments should
 address. Future results must use the same six questions, OpenAI index, and top-k
 value unless the changed configuration is explicitly documented.
+
+## Experiment 1 - Overlap Deduplication
+
+The first retrieval experiment overfetched 15 semantic candidates, removed
+exact chunk IDs and highly overlapping same-file line ranges, then returned the
+final top 3 results.
+
+Results:
+
+| Strategy | Candidate K | Threshold | Hit Rate@3 | MRR |
+|---|---:|---:|---:|---:|
+| Semantic baseline | 3 | N/A | 0.6667 | 0.5000 |
+| Deduplicated | 15 | 0.50 | 0.6667 | 0.5000 |
+| Deduplicated | 15 | 0.25 | 0.6667 | 0.5000 |
+
+Both thresholds produced the same `4/6` result as the baseline. The project is
+chunked into 20-line windows with 5 lines of overlap, so adjacent full chunks
+have an overlap ratio of `5/20 = 0.25`. Testing at `0.25` therefore exercised
+the actual configured chunk overlap boundary.
+
+The repeated README results were mostly different, non-overlapping sections.
+Overlap deduplication correctly retained them, which means this failure is not
+an exact-duplicate or line-overlap problem. The next experiment should limit
+how many initial results one file can occupy while still allowing a configurable
+number of useful same-file chunks.

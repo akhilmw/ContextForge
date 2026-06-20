@@ -11,9 +11,9 @@ SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
-from contextforge.ingest import ingest_repository
-from contextforge.retriever import retrieve
 from contextforge.evaluation import evaluate_case, summarize_results
+from contextforge.ingest import ingest_repository
+from contextforge.retriever import retrieve, retrieve_deduplicated
 
 
 def load_eval_config(eval_file: Path) -> dict:
@@ -49,6 +49,24 @@ def main():
         action="store_true",
         help="Ingest the eval repo before running retrieval",
     )
+    parser.add_argument(
+        "--strategy",
+        choices=("semantic", "deduplicated"),
+        default="semantic",
+        help="Retrieval strategy to evaluate (default: semantic)",
+    )
+    parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=15,
+        help="Semantic candidates fetched before deduplication (default: 15)",
+    )
+    parser.add_argument(
+        "--overlap-threshold",
+        type=float,
+        default=0.5,
+        help="Overlap ratio removed by deduplicated retrieval (default: 0.5)",
+    )
 
     args = parser.parse_args()
     config = load_eval_config(Path(args.eval_file))
@@ -77,19 +95,31 @@ def main():
     print(f"Eval: {config.get('name', args.eval_file)}")
     print(f"Project: {project_name}")
     print(f"Embedder: {embedder_name}")
+    print(f"Strategy: {args.strategy}")
     print(f"Top K: {top_k}")
+    if args.strategy == "deduplicated":
+        print(f"Candidate K: {args.candidate_k}")
+        print(f"Overlap threshold: {args.overlap_threshold}")
     print()
 
     # Keep each result so run-level metrics can be calculated after retrieval.
     case_results = []
     for item in questions:
-        results = retrieve(
-            data_dir=data_dir,
-            project_name=project_name,
-            question=item["question"],
-            embedder=embedder,
-            top_k=top_k,
-        )
+        retrieval_args = {
+            "data_dir": data_dir,
+            "project_name": project_name,
+            "question": item["question"],
+            "embedder": embedder,
+            "top_k": top_k,
+        }
+        if args.strategy == "deduplicated":
+            results = retrieve_deduplicated(
+                **retrieval_args,
+                candidate_k=args.candidate_k,
+                overlap_threshold=args.overlap_threshold,
+            )
+        else:
+            results = retrieve(**retrieval_args)
 
         retrieved_files = [result.chunk.file_path for result in results]
         expected_files = item["expected_files"]

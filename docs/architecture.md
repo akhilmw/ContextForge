@@ -90,6 +90,24 @@ Phase 2 adds deterministic metrics in `evaluation.py`:
 types remain outside the core application models because they belong only to
 the evaluation subsystem.
 
+## Phase 2 Retrieval Strategies
+
+The original `retrieve()` function remains the semantic baseline.
+`retrieve_deduplicated()` is a separate strategy:
+
+```text
+Question
+  -> retrieve candidate_k semantic results
+  -> remove repeated chunk IDs
+  -> remove same-file chunks above the line-overlap threshold
+  -> return final top_k results
+```
+
+Keeping both functions allows the evaluator to compare changes without moving
+the baseline. The evaluator selects them with `--strategy semantic` or
+`--strategy deduplicated` and records candidate count and overlap threshold for
+reproducibility.
+
 ## Core Data Models
 
 - `Document`: one loaded source file.

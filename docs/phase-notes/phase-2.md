@@ -45,11 +45,16 @@ Completed:
 - Mean reciprocal rank
 - Per-question and aggregate evaluation result models
 - Metric output in the existing retrieval evaluator
+- Exact chunk-ID deduplication
+- Same-file line-overlap measurement and deduplication
+- Candidate overfetching before final top-k selection
+- Semantic and deduplicated evaluator strategies
+- Deduplication experiments at thresholds 0.50 and 0.25
 
 Next:
 
-- Build the retrieval comparison runner
-- Reduce duplicate and overlapping results
+- Add configurable source diversity
+- Measure whether source diversity improves the baseline
 
 ## Phase Boundaries
 
