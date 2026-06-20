@@ -174,3 +174,34 @@ evidence coverage.
 The remaining `chunked-response` failure suggests that post-processing alone is
 not enough. BM25 keyword retrieval is the next experiment because exact code
 terms and implementation paths may be underweighted by embeddings.
+
+### Manual BM25 Experiment
+
+BM25 was implemented manually to make its inputs visible:
+
+- term frequency describes one term inside one chunk
+- document length describes the current chunk
+- document frequency, average length, and total documents describe the corpus
+- `k1` controls term-frequency saturation
+- `b` controls document-length normalization
+
+The tokenizer preserves exact identifiers such as `RequestFromReader` and also
+adds components such as `request`, `from`, and `reader`. File paths are indexed
+with chunk content so source names can participate in retrieval.
+
+Keyword-only evaluation produced:
+
+```text
+Summary: 2/6 passed
+Hit Rate@3: 0.3333
+MRR: 0.1667
+```
+
+BM25 performed worse than semantic retrieval on the full natural-language
+questions. Exact matching alone was not sufficient because generic query terms
+could accumulate across README and test chunks, and identifiers appearing in
+many tests were less rare than expected.
+
+The lesson is not that BM25 is unusable. Its raw scores answer a different
+question from cosine similarity. Hybrid retrieval should combine their ranking
+positions, not add incomparable score scales directly.

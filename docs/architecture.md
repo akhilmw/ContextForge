@@ -112,8 +112,20 @@ deduplicated candidates
   -> return final top_k results
 ```
 
-The evaluator selects `semantic`, `deduplicated`, or `diverse` and records the
-candidate count, overlap threshold, and per-file limit for reproducibility.
+Keyword retrieval is a separate provider-free strategy:
+
+```text
+Question and stored chunks
+  -> code-aware tokenization of question, paths, and content
+  -> term and corpus statistics
+  -> BM25 score per chunk
+  -> discard zero-score chunks
+  -> ranked top_k SearchResults
+```
+
+The evaluator selects `semantic`, `deduplicated`, `diverse`, or `keyword` and
+records candidate, diversity, and BM25 settings for reproducibility. Keyword
+evaluation on an existing index does not initialize or call an embedder.
 
 ## Core Data Models
 

@@ -101,3 +101,34 @@ appeared earlier on average.
 `chunked-response` still failed. Source diversity solved one ranking-capacity
 problem, but it cannot make a weakly ranked exact implementation file relevant.
 The next experiment will add BM25 keyword retrieval before hybrid rank fusion.
+
+## Experiment 3 - BM25 Keyword Retrieval
+
+The third experiment implemented BM25 manually and evaluated it as a standalone
+retriever. Chunk paths and content were tokenized together, preserving complete
+code identifiers while also splitting snake_case and CamelCase components.
+
+Configuration:
+
+- BM25 `k1`: 1.5
+- BM25 `b`: 0.75
+- Retrieval limit: top 3
+- Embedding API calls: none
+
+Results:
+
+| Strategy | Hit Rate@3 | MRR |
+|---|---:|---:|
+| Semantic baseline | 0.6667 | 0.5000 |
+| Diverse semantic | **0.8333** | **0.5833** |
+| BM25 keyword | 0.3333 | 0.1667 |
+
+Keyword-only retrieval passed `2/6` questions. For the partial-read question,
+the `RequestFromReader` implementation chunk ranked 14 even though it contained
+the exact identifier. The identifier also appears in tests, reducing its IDF,
+while generic query terms accumulated score in other chunks.
+
+This result does not justify discarding BM25. It shows that BM25 and semantic
+retrieval solve different ranking problems. The next experiment will combine
+their rank positions with Reciprocal Rank Fusion instead of adding their
+incompatible raw scores.

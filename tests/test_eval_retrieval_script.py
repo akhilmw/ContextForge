@@ -173,6 +173,38 @@ def test_eval_retrieval_script_runs_diverse_strategy(tmp_path):
     assert "PASS sample-question" in result.stdout
 
 
+def test_eval_retrieval_script_runs_keyword_strategy(tmp_path):
+    data_dir = tmp_path / "data"
+    ingest_repository(
+        repo_path=SAMPLE_REPO,
+        project_name="demo",
+        data_dir=data_dir,
+        embedder=FakeEmbedder(),
+    )
+    eval_file = write_eval_file(
+        tmp_path,
+        data_dir,
+        ["src/parser.py"],
+    )
+
+    result = run_script(
+        "--eval-file",
+        str(eval_file),
+        "--strategy",
+        "keyword",
+        "--bm25-k1",
+        "1.2",
+        "--bm25-b",
+        "0.6",
+    )
+
+    assert result.returncode == 0
+    assert "Strategy: keyword" in result.stdout
+    assert "BM25 k1: 1.2" in result.stdout
+    assert "BM25 b: 0.6" in result.stdout
+    assert "PASS sample-question" in result.stdout
+
+
 def test_eval_retrieval_script_rejects_unknown_strategy():
     result = run_script(
         "--eval-file",

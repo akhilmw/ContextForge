@@ -13,6 +13,7 @@ sys.path.insert(0, str(SRC_DIR))
 from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.evaluation import evaluate_case, summarize_results
 from contextforge.ingest import ingest_repository
+from contextforge.keyword_retriever import retrieve_keywords
 from contextforge.retriever import retrieve, retrieve_deduplicated, retrieve_diverse
 
 
@@ -51,7 +52,7 @@ def main():
     )
     parser.add_argument(
         "--strategy",
-        choices=("semantic", "deduplicated", "diverse"),
+        choices=("semantic", "deduplicated", "diverse", "keyword"),
         default="semantic",
         help="Retrieval strategy to evaluate (default: semantic)",
     )
@@ -73,6 +74,18 @@ def main():
         default=1,
         help="Maximum final candidates retained per file (default: 1)",
     )
+    parser.add_argument(
+        "--bm25-k1",
+        type=float,
+        default=1.5,
+        help="BM25 term-frequency saturation setting (default: 1.5)",
+    )
+    parser.add_argument(
+        "--bm25-b",
+        type=float,
+        default=0.75,
+        help="BM25 document-length normalization setting (default: 0.75)",
+    )
 
     args = parser.parse_args()
     config = load_eval_config(Path(args.eval_file))
@@ -83,7 +96,10 @@ def main():
     top_k = config.get("top_k", 3)
     questions = config["questions"]
 
-    embedder = make_embedder(embedder_name)
+    # Keyword retrieval needs no embedding provider unless this run also ingests.
+    embedder = None
+    if args.strategy != "keyword" or args.ingest:
+        embedder = make_embedder(embedder_name)
 
     if args.ingest:
         # Rebuild the project index when the eval should reflect current repo
@@ -108,33 +124,46 @@ def main():
         print(f"Overlap threshold: {args.overlap_threshold}")
     if args.strategy == "diverse":
         print(f"Max per file: {args.max_per_file}")
+    if args.strategy == "keyword":
+        print(f"BM25 k1: {args.bm25_k1}")
+        print(f"BM25 b: {args.bm25_b}")
     print()
 
     # Keep each result so run-level metrics can be calculated after retrieval.
     case_results = []
     for item in questions:
-        retrieval_args = {
-            "data_dir": data_dir,
-            "project_name": project_name,
-            "question": item["question"],
-            "embedder": embedder,
-            "top_k": top_k,
-        }
-        if args.strategy == "deduplicated":
-            results = retrieve_deduplicated(
-                **retrieval_args,
-                candidate_k=args.candidate_k,
-                overlap_threshold=args.overlap_threshold,
-            )
-        elif args.strategy == "diverse":
-            results = retrieve_diverse(
-                **retrieval_args,
-                candidate_k=args.candidate_k,
-                overlap_threshold=args.overlap_threshold,
-                max_per_file=args.max_per_file,
+        if args.strategy == "keyword":
+            results = retrieve_keywords(
+                data_dir=data_dir,
+                project_name=project_name,
+                question=item["question"],
+                top_k=top_k,
+                k1=args.bm25_k1,
+                b=args.bm25_b,
             )
         else:
-            results = retrieve(**retrieval_args)
+            retrieval_args = {
+                "data_dir": data_dir,
+                "project_name": project_name,
+                "question": item["question"],
+                "embedder": embedder,
+                "top_k": top_k,
+            }
+            if args.strategy == "deduplicated":
+                results = retrieve_deduplicated(
+                    **retrieval_args,
+                    candidate_k=args.candidate_k,
+                    overlap_threshold=args.overlap_threshold,
+                )
+            elif args.strategy == "diverse":
+                results = retrieve_diverse(
+                    **retrieval_args,
+                    candidate_k=args.candidate_k,
+                    overlap_threshold=args.overlap_threshold,
+                    max_per_file=args.max_per_file,
+                )
+            else:
+                results = retrieve(**retrieval_args)
 
         retrieved_files = [result.chunk.file_path for result in results]
         expected_files = item["expected_files"]

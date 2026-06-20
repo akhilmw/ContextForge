@@ -53,11 +53,17 @@ Completed:
 - Configurable per-file source diversity
 - Diverse evaluator strategy
 - Source-diversity experiments at limits 1 and 2
+- Manual code-aware tokenization
+- Term frequency, document frequency, IDF, and length statistics
+- Per-term and per-document BM25 scoring
+- Keyword retrieval over chunk paths and content
+- Keyword evaluator strategy and BM25 configuration flags
+- Keyword-only baseline: 2/6, Hit Rate@3 0.3333, MRR 0.1667
 
 Next:
 
-- Implement BM25 keyword retrieval
-- Compare keyword-only retrieval with semantic retrieval
+- Implement Reciprocal Rank Fusion
+- Compare semantic, BM25, and hybrid retrieval
 
 ## Phase Boundaries
 
