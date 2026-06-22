@@ -132,3 +132,36 @@ This result does not justify discarding BM25. It shows that BM25 and semantic
 retrieval solve different ranking problems. The next experiment will combine
 their rank positions with Reciprocal Rank Fusion instead of adding their
 incompatible raw scores.
+
+## Experiment 4 - Hybrid Reciprocal Rank Fusion
+
+The fourth experiment retrieved 15 semantic and 15 BM25 candidates, combined
+their rank positions with Reciprocal Rank Fusion, then applied overlap removal
+and one-result-per-file source diversity before selecting the final top 3.
+
+Configuration:
+
+- Candidate count per retriever: 15
+- RRF rank constant: 60
+- Overlap threshold: 0.25
+- Maximum results per file: 1
+- BM25 `k1`: 1.5
+- BM25 `b`: 0.75
+
+Results:
+
+| Strategy | Hit Rate@3 | MRR |
+|---|---:|---:|
+| Semantic baseline | 0.6667 | 0.5000 |
+| Diverse semantic | 0.8333 | 0.5833 |
+| BM25 keyword | 0.3333 | 0.1667 |
+| Hybrid RRF | **1.0000** | **0.6667** |
+
+Hybrid retrieval passed all `6/6` questions. It recovered `chunked-response`
+with `internal/response/response.go` at rank 1. BM25 was weak alone, but its
+independent ranking evidence changed the fused ordering enough to solve the
+remaining semantic failure.
+
+MRR remains below 1.0 because four successful questions placed their first
+expected source at rank 2. The next quality step should target ordering within
+the fused shortlist rather than adding more first-stage candidate generators.

@@ -59,11 +59,16 @@ Completed:
 - Keyword retrieval over chunk paths and content
 - Keyword evaluator strategy and BM25 configuration flags
 - Keyword-only baseline: 2/6, Hit Rate@3 0.3333, MRR 0.1667
+- Reciprocal Rank Fusion with deterministic tie handling
+- Hybrid semantic-plus-BM25 retrieval
+- Post-fusion overlap removal and source diversity
+- Hybrid evaluator strategy and RRF configuration
+- Hybrid result: 6/6, Hit Rate@3 1.0000, MRR 0.6667
 
 Next:
 
-- Implement Reciprocal Rank Fusion
-- Compare semantic, BM25, and hybrid retrieval
+- Add and evaluate second-stage reranking
+- Improve first-relevant-source ordering without reducing Hit Rate@3
 
 ## Phase Boundaries
 

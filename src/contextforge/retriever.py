@@ -4,10 +4,12 @@ import math
 from pathlib import Path
 
 from contextforge.embedder import Embedder
+from contextforge.keyword_retriever import retrieve_keywords
 from contextforge.models import SearchResult
 from contextforge.ranking import (
     deduplicate_overlapping_results,
     limit_results_per_file,
+    reciprocal_rank_fusion,
 )
 from contextforge.store import load_chunks
 
@@ -147,3 +149,86 @@ def retrieve_diverse(
     max_files = limit_results_per_file(deduplicated, max_per_file)
 
     return max_files[:top_k]
+
+
+def retrieve_hybrid(
+    data_dir: Path,
+    project_name: str,
+    question: str,
+    embedder: Embedder,
+    top_k: int = 5,
+    candidate_k: int = 15,
+    rank_constant: int = 60,
+    overlap_threshold: float = 0.25,
+    max_per_file: int = 1,
+    k1: float = 1.5,
+    b: float = 0.75,
+) -> list[SearchResult]:
+    """Fuse semantic and BM25 candidates, then deduplicate and diversify."""
+
+    if not question.strip():
+        raise ValueError("question cannot be empty")
+
+    if isinstance(top_k, bool) or not isinstance(top_k, int):
+        raise TypeError("top_k is not of type int")
+    if top_k <= 0:
+        raise ValueError("top_k has to be a positive integer")
+
+    if isinstance(candidate_k, bool) or not isinstance(candidate_k, int):
+        raise TypeError("candidate_k is not of type int")
+    if candidate_k < top_k:
+        raise ValueError("candidate_k must be at least top_k")
+
+    if isinstance(rank_constant, bool) or not isinstance(rank_constant, int):
+        raise TypeError("rank_constant is not of type int")
+    if rank_constant <= 0:
+        raise ValueError("rank_constant has to be a positive integer")
+
+    if isinstance(overlap_threshold, bool) or not isinstance(
+        overlap_threshold, (int, float)
+    ):
+        raise TypeError("overlap_threshold is not of type numeric")
+    if overlap_threshold <= 0 or overlap_threshold > 1:
+        raise ValueError("overlap_threshold has to be between 0 and 1")
+
+    if isinstance(max_per_file, bool) or not isinstance(max_per_file, int):
+        raise TypeError("max_per_file is not of type int")
+    if max_per_file <= 0:
+        raise ValueError("max_per_file has to be a positive integer")
+
+    if isinstance(k1, bool) or not isinstance(k1, (int, float)):
+        raise TypeError("k1 is not of type numeric")
+    if not math.isfinite(k1) or k1 <= 0:
+        raise ValueError("k1 has to be finite and positive")
+
+    if isinstance(b, bool) or not isinstance(b, (int, float)):
+        raise TypeError("b is not of type numeric")
+    if not math.isfinite(b) or b < 0 or b > 1:
+        raise ValueError("b has to be finite and between 0 and 1")
+
+    # Both strategies receive the same question and candidate budget. Their raw
+    # scores remain separate because RRF combines only rank positions.
+    semantic_results = retrieve(
+        data_dir=data_dir,
+        project_name=project_name,
+        question=question,
+        embedder=embedder,
+        top_k=candidate_k,
+    )
+    keyword_results = retrieve_keywords(
+        data_dir=data_dir,
+        project_name=project_name,
+        question=question,
+        top_k=candidate_k,
+        k1=k1,
+        b=b,
+    )
+
+    fused = reciprocal_rank_fusion(
+        [semantic_results, keyword_results],
+        rank_constant=rank_constant,
+    )
+    deduplicated = deduplicate_overlapping_results(fused, overlap_threshold)
+    diverse = limit_results_per_file(deduplicated, max_per_file)
+
+    return diverse[:top_k]

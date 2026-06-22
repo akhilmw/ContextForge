@@ -205,3 +205,26 @@ many tests were less rare than expected.
 The lesson is not that BM25 is unusable. Its raw scores answer a different
 question from cosine similarity. Hybrid retrieval should combine their ranking
 positions, not add incomparable score scales directly.
+
+### Hybrid RRF Experiment
+
+Reciprocal Rank Fusion combines result positions using
+`1 / (rank_constant + rank)`. It avoids adding cosine similarity and BM25
+scores, whose numeric scales have unrelated meanings.
+
+The hybrid pipeline produced:
+
+```text
+Summary: 6/6 passed
+Hit Rate@3: 1.0000
+MRR: 0.6667
+```
+
+This is the strongest result so far. BM25 passed only `2/6` by itself, yet its
+ranking evidence helped hybrid retrieval recover the final failed question.
+A component does not need to be the best standalone system to add useful,
+independent signal to an ensemble.
+
+Hit Rate@3 is now perfect on the current set, but MRR shows that relevant
+sources are not consistently first. The next retrieval-quality problem is
+second-stage ordering, which can be explored with reranking.

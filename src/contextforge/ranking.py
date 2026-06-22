@@ -94,3 +94,48 @@ def limit_results_per_file(
             count_per_file[file_path] += 1
 
     return final_results
+
+
+def reciprocal_rank_fusion(
+    rankings: list[list[SearchResult]],
+    rank_constant: int = 60,
+) -> list[SearchResult]:
+    """Combine ranked strategies using chunk positions instead of raw scores."""
+
+    if isinstance(rank_constant, bool) or not isinstance(rank_constant, int):
+        raise TypeError("rank_constant is not of type int")
+
+    if rank_constant <= 0:
+        raise ValueError("rank_constant has to be a positive integer")
+
+    if not rankings:
+        return []
+
+    # Scores use stable chunk identity. The first actual Chunk is retained in a
+    # separate map so fused results preserve source metadata, not just IDs.
+    chunk_scores: defaultdict[str, float] = defaultdict(float)
+    chunks_by_id: dict[str, Chunk] = {}
+
+    for ranking in rankings:
+        # Each strategy may contribute only once per chunk, even if its input
+        # accidentally contains a duplicate result.
+        seen_in_ranking: set[str] = set()
+
+        for rank, result in enumerate(ranking, start=1):
+            chunk_id = result.chunk.chunk_id
+            if chunk_id in seen_in_ranking:
+                continue
+
+            seen_in_ranking.add(chunk_id)
+            chunks_by_id.setdefault(chunk_id, result.chunk)
+            chunk_scores[chunk_id] += 1.0 / (rank_constant + rank)
+
+    fused_results = [
+        SearchResult(chunk=chunks_by_id[chunk_id], score=score)
+        for chunk_id, score in chunk_scores.items()
+    ]
+
+    # Stable sorting preserves first-seen order when fusion scores tie.
+    fused_results.sort(key=lambda result: result.score, reverse=True)
+
+    return fused_results

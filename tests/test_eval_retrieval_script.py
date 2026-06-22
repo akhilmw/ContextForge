@@ -205,6 +205,50 @@ def test_eval_retrieval_script_runs_keyword_strategy(tmp_path):
     assert "PASS sample-question" in result.stdout
 
 
+def test_eval_retrieval_script_runs_hybrid_strategy(tmp_path):
+    data_dir = tmp_path / "data"
+    ingest_repository(
+        repo_path=SAMPLE_REPO,
+        project_name="demo",
+        data_dir=data_dir,
+        embedder=FakeEmbedder(),
+    )
+    eval_file = write_eval_file(
+        tmp_path,
+        data_dir,
+        ["docs/architecture.md", "notes/debug.txt", "src/parser.py"],
+    )
+
+    result = run_script(
+        "--eval-file",
+        str(eval_file),
+        "--strategy",
+        "hybrid",
+        "--candidate-k",
+        "5",
+        "--rank-constant",
+        "40",
+        "--overlap-threshold",
+        "0.6",
+        "--max-per-file",
+        "2",
+        "--bm25-k1",
+        "1.2",
+        "--bm25-b",
+        "0.6",
+    )
+
+    assert result.returncode == 0
+    assert "Strategy: hybrid" in result.stdout
+    assert "Candidate K: 5" in result.stdout
+    assert "Overlap threshold: 0.6" in result.stdout
+    assert "Max per file: 2" in result.stdout
+    assert "BM25 k1: 1.2" in result.stdout
+    assert "BM25 b: 0.6" in result.stdout
+    assert "RRF rank constant: 40" in result.stdout
+    assert "PASS sample-question" in result.stdout
+
+
 def test_eval_retrieval_script_rejects_unknown_strategy():
     result = run_script(
         "--eval-file",

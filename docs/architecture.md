@@ -123,9 +123,26 @@ Question and stored chunks
   -> ranked top_k SearchResults
 ```
 
-The evaluator selects `semantic`, `deduplicated`, `diverse`, or `keyword` and
-records candidate, diversity, and BM25 settings for reproducibility. Keyword
-evaluation on an existing index does not initialize or call an embedder.
+The evaluator selects `semantic`, `deduplicated`, `diverse`, `keyword`, or
+`hybrid` and records candidate, diversity, and BM25 settings for
+reproducibility. Keyword evaluation on an existing index does not initialize or
+call an embedder.
+
+Hybrid retrieval combines the two first-stage retrievers:
+
+```text
+semantic candidate ranking ─┐
+                            ├─> Reciprocal Rank Fusion
+BM25 candidate ranking ─────┘
+                                  -> overlap deduplication
+                                  -> source diversity
+                                  -> final top_k
+```
+
+RRF creates new `SearchResult` scores from rank positions while preserving the
+original `Chunk` objects and citation metadata. The evaluator exposes this as
+`--strategy hybrid` and records candidate count, RRF constant, overlap,
+diversity, and BM25 settings.
 
 ## Core Data Models
 

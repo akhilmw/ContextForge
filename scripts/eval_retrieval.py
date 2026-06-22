@@ -14,7 +14,12 @@ from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.evaluation import evaluate_case, summarize_results
 from contextforge.ingest import ingest_repository
 from contextforge.keyword_retriever import retrieve_keywords
-from contextforge.retriever import retrieve, retrieve_deduplicated, retrieve_diverse
+from contextforge.retriever import (
+    retrieve,
+    retrieve_deduplicated,
+    retrieve_diverse,
+    retrieve_hybrid,
+)
 
 
 def load_eval_config(eval_file: Path) -> dict:
@@ -52,7 +57,7 @@ def main():
     )
     parser.add_argument(
         "--strategy",
-        choices=("semantic", "deduplicated", "diverse", "keyword"),
+        choices=("semantic", "deduplicated", "diverse", "keyword", "hybrid"),
         default="semantic",
         help="Retrieval strategy to evaluate (default: semantic)",
     )
@@ -85,6 +90,12 @@ def main():
         type=float,
         default=0.75,
         help="BM25 document-length normalization setting (default: 0.75)",
+    )
+    parser.add_argument(
+        "--rank-constant",
+        type=int,
+        default=60,
+        help="RRF rank constant used by hybrid retrieval (default: 60)",
     )
 
     args = parser.parse_args()
@@ -119,14 +130,16 @@ def main():
     print(f"Embedder: {embedder_name}")
     print(f"Strategy: {args.strategy}")
     print(f"Top K: {top_k}")
-    if args.strategy in ("deduplicated", "diverse"):
+    if args.strategy in ("deduplicated", "diverse", "hybrid"):
         print(f"Candidate K: {args.candidate_k}")
         print(f"Overlap threshold: {args.overlap_threshold}")
-    if args.strategy == "diverse":
+    if args.strategy in ("diverse", "hybrid"):
         print(f"Max per file: {args.max_per_file}")
-    if args.strategy == "keyword":
+    if args.strategy in ("keyword", "hybrid"):
         print(f"BM25 k1: {args.bm25_k1}")
         print(f"BM25 b: {args.bm25_b}")
+    if args.strategy == "hybrid":
+        print(f"RRF rank constant: {args.rank_constant}")
     print()
 
     # Keep each result so run-level metrics can be calculated after retrieval.
@@ -161,6 +174,16 @@ def main():
                     candidate_k=args.candidate_k,
                     overlap_threshold=args.overlap_threshold,
                     max_per_file=args.max_per_file,
+                )
+            elif args.strategy == "hybrid":
+                results = retrieve_hybrid(
+                    **retrieval_args,
+                    candidate_k=args.candidate_k,
+                    rank_constant=args.rank_constant,
+                    overlap_threshold=args.overlap_threshold,
+                    max_per_file=args.max_per_file,
+                    k1=args.bm25_k1,
+                    b=args.bm25_b,
                 )
             else:
                 results = retrieve(**retrieval_args)

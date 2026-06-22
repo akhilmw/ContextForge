@@ -6,6 +6,7 @@ from contextforge.ranking import (
     deduplicate_results,
     limit_results_per_file,
     line_overlap_ratio,
+    reciprocal_rank_fusion,
 )
 
 
@@ -246,3 +247,74 @@ def test_limit_results_per_file_rejects_non_integer_limit(max_per_file):
 def test_limit_results_per_file_rejects_non_positive_limit(max_per_file):
     with pytest.raises(ValueError, match="should be a positive integer"):
         limit_results_per_file([], max_per_file)
+
+
+def test_reciprocal_rank_fusion_combines_strategy_rankings():
+    a = make_result("a", 0.9)
+    b = make_result("b", 0.8)
+    c = make_result("c", 0.7)
+    d = make_result("d", 8.0)
+
+    fused = reciprocal_rank_fusion([[a, b, c], [b, d, a]])
+
+    assert [result.chunk.chunk_id for result in fused] == ["b", "a", "d", "c"]
+    scores = {result.chunk.chunk_id: result.score for result in fused}
+    assert scores["a"] == pytest.approx(1 / 61 + 1 / 63)
+    assert scores["b"] == pytest.approx(1 / 62 + 1 / 61)
+    assert scores["c"] == pytest.approx(1 / 63)
+    assert scores["d"] == pytest.approx(1 / 62)
+
+
+def test_reciprocal_rank_fusion_preserves_first_chunk_object():
+    first = make_result("shared", 0.9)
+    second = make_result("shared", 10.0, file_path="src/other.py")
+
+    fused = reciprocal_rank_fusion([[first], [second]])
+
+    assert fused[0].chunk is first.chunk
+
+
+def test_reciprocal_rank_fusion_counts_chunk_once_per_ranking():
+    duplicate = make_result("duplicate", 0.9)
+
+    fused = reciprocal_rank_fusion([[duplicate, duplicate]])
+
+    assert len(fused) == 1
+    assert fused[0].score == pytest.approx(1 / 61)
+
+
+def test_reciprocal_rank_fusion_preserves_first_seen_order_for_ties():
+    first = make_result("first", 0.9)
+    second = make_result("second", 0.8)
+
+    fused = reciprocal_rank_fusion([[first], [second]])
+
+    assert [result.chunk.chunk_id for result in fused] == ["first", "second"]
+
+
+@pytest.mark.parametrize("rankings", [[], [[]], [[], []]])
+def test_reciprocal_rank_fusion_returns_empty_list_for_empty_rankings(rankings):
+    assert reciprocal_rank_fusion(rankings) == []
+
+
+@pytest.mark.parametrize("rank_constant", [True, False, 60.0, "60"])
+def test_reciprocal_rank_fusion_rejects_non_integer_constant(rank_constant):
+    with pytest.raises(TypeError, match="rank_constant is not of type int"):
+        reciprocal_rank_fusion([], rank_constant)
+
+
+@pytest.mark.parametrize("rank_constant", [0, -1])
+def test_reciprocal_rank_fusion_rejects_non_positive_constant(rank_constant):
+    with pytest.raises(ValueError, match="has to be a positive integer"):
+        reciprocal_rank_fusion([], rank_constant)
+
+
+def test_reciprocal_rank_fusion_does_not_mutate_inputs():
+    first = make_result("first", 0.9)
+    second = make_result("second", 0.8)
+    rankings = [[first, second], [second, first]]
+    original_rankings = [ranking.copy() for ranking in rankings]
+
+    reciprocal_rank_fusion(rankings)
+
+    assert rankings == original_rankings
