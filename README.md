@@ -1,8 +1,8 @@
 # ContextForge
 
 ContextForge is a learning-first RAG project for asking source-grounded
-questions about a local codebase. Phase 1 intentionally builds the pipeline
-manually before introducing frameworks.
+questions about a local codebase. The project intentionally builds the core
+pipeline manually before introducing frameworks.
 
 ## Phase 1 Status
 
@@ -18,6 +18,33 @@ Phase 1 supports:
 - Gemini, OpenAI, or fake LLM answers
 - source citations with file paths and line ranges
 - repeatable retrieval evals
+
+## Phase 2 Status
+
+Phase 2 focuses on retrieval quality and measurement. It adds:
+
+- Hit@K, Hit Rate@K, reciprocal rank, and MRR metrics
+- exact chunk-ID deduplication
+- same-file line-overlap deduplication
+- candidate overfetching before final top-k selection
+- source diversity limits
+- manual BM25 keyword retrieval
+- Reciprocal Rank Fusion for semantic plus keyword retrieval
+- local heuristic reranking
+- side-by-side retrieval comparison scripts
+
+Measured on the HttpGo eval set with OpenAI embeddings and top 3 retrieval:
+
+| Strategy | Hits | Hit Rate@3 | MRR |
+|---|---:|---:|---:|
+| Semantic | 4/6 | 0.6667 | 0.5000 |
+| Diverse semantic | 5/6 | 0.8333 | 0.5833 |
+| BM25 keyword | 2/6 | 0.3333 | 0.1667 |
+| Hybrid RRF | 6/6 | 1.0000 | 0.6667 |
+| Hybrid + heuristic reranker | 6/6 | 1.0000 | 0.9167 |
+
+LangChain is deferred to a later phase so the retrieval work can stand on its
+own and be compared cleanly.
 
 ## Setup
 
@@ -129,6 +156,41 @@ uv run python scripts/eval_retrieval.py \
 The Phase 1 eval checks whether each question retrieves at least one expected
 source file in the top-k results.
 
+Run the Phase 2 semantic baseline:
+
+```bash
+uv run python scripts/eval_retrieval.py \
+  --eval-file evals/phase_2_questions.json \
+  --strategy semantic
+```
+
+Run hybrid retrieval with heuristic reranking:
+
+```bash
+uv run python scripts/eval_retrieval.py \
+  --eval-file evals/phase_2_questions.json \
+  --strategy hybrid-reranked \
+  --candidate-k 15 \
+  --rank-constant 60 \
+  --overlap-threshold 0.25 \
+  --max-per-file 1 \
+  --bm25-k1 1.5 \
+  --bm25-b 0.75
+```
+
+Compare all Phase 2 retrieval strategies:
+
+```bash
+uv run python scripts/compare_retrievers.py \
+  --eval-file evals/phase_2_questions.json \
+  --candidate-k 15 \
+  --rank-constant 60 \
+  --overlap-threshold 0.25 \
+  --max-per-file 1 \
+  --bm25-k1 1.5 \
+  --bm25-b 0.75
+```
+
 ## Offline Mode
 
 Most tests use fake providers so they do not need network access or Gemini
@@ -144,7 +206,8 @@ or OpenAI for realistic retrieval behavior.
 ## Current Limitations
 
 - JSON storage loads all project chunks into memory.
-- Retrieval is semantic-only, not hybrid keyword plus vector search.
 - Chunks are line-based and do not understand code symbols.
 - Re-ingestion replaces the whole project index.
+- API-backed reranking is not implemented yet.
+- LangChain integration is deferred to a later phase.
 - There is no API server or web UI yet.
