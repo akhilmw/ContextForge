@@ -14,6 +14,7 @@ from contextforge.embedder import FakeEmbedder, GeminiEmbedder, OpenAIEmbedder
 from contextforge.evaluation import evaluate_case, summarize_results
 from contextforge.ingest import ingest_repository
 from contextforge.keyword_retriever import retrieve_keywords
+from contextforge.reranker import HeuristicReranker
 from contextforge.retriever import (
     retrieve,
     retrieve_deduplicated,
@@ -57,7 +58,14 @@ def main():
     )
     parser.add_argument(
         "--strategy",
-        choices=("semantic", "deduplicated", "diverse", "keyword", "hybrid"),
+        choices=(
+            "semantic",
+            "deduplicated",
+            "diverse",
+            "keyword",
+            "hybrid",
+            "hybrid-reranked",
+        ),
         default="semantic",
         help="Retrieval strategy to evaluate (default: semantic)",
     )
@@ -130,15 +138,15 @@ def main():
     print(f"Embedder: {embedder_name}")
     print(f"Strategy: {args.strategy}")
     print(f"Top K: {top_k}")
-    if args.strategy in ("deduplicated", "diverse", "hybrid"):
+    if args.strategy in ("deduplicated", "diverse", "hybrid", "hybrid-reranked"):
         print(f"Candidate K: {args.candidate_k}")
         print(f"Overlap threshold: {args.overlap_threshold}")
-    if args.strategy in ("diverse", "hybrid"):
+    if args.strategy in ("diverse", "hybrid", "hybrid-reranked"):
         print(f"Max per file: {args.max_per_file}")
-    if args.strategy in ("keyword", "hybrid"):
+    if args.strategy in ("keyword", "hybrid", "hybrid-reranked"):
         print(f"BM25 k1: {args.bm25_k1}")
         print(f"BM25 b: {args.bm25_b}")
-    if args.strategy == "hybrid":
+    if args.strategy in ("hybrid", "hybrid-reranked"):
         print(f"RRF rank constant: {args.rank_constant}")
     print()
 
@@ -184,6 +192,21 @@ def main():
                     max_per_file=args.max_per_file,
                     k1=args.bm25_k1,
                     b=args.bm25_b,
+                )
+            elif args.strategy == "hybrid-reranked":
+                results = retrieve_hybrid(
+                    data_dir=data_dir,
+                    project_name=project_name,
+                    question=item["question"],
+                    embedder=embedder,
+                    top_k=top_k,
+                    candidate_k=args.candidate_k,
+                    rank_constant=args.rank_constant,
+                    overlap_threshold=args.overlap_threshold,
+                    max_per_file=args.max_per_file,
+                    k1=args.bm25_k1,
+                    b=args.bm25_b,
+                    reranker=HeuristicReranker(),
                 )
             else:
                 results = retrieve(**retrieval_args)

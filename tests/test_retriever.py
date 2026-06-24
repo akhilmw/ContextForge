@@ -10,6 +10,7 @@ from contextforge.retriever import (
     retrieve_diverse,
     retrieve_hybrid,
 )
+from contextforge.reranker import FakeReranker
 from contextforge.store import save_chunks
 
 
@@ -509,6 +510,52 @@ def test_retrieve_hybrid_returns_empty_when_both_strategies_are_empty(
     )
 
     assert results == []
+
+
+def test_retrieve_hybrid_reranks_before_diversity_filter(tmp_path, monkeypatch):
+    shared_first = SearchResult(
+        chunk=make_chunk(
+            "shared-first",
+            [1.0, 0.0],
+            file_path="src/shared.py",
+            start_line=1,
+            end_line=1,
+        ),
+        score=0.9,
+    )
+    shared_second = SearchResult(
+        chunk=make_chunk(
+            "shared-second",
+            [0.8, 0.2],
+            file_path="src/shared.py",
+            start_line=2,
+            end_line=2,
+        ),
+        score=0.8,
+    )
+    other = SearchResult(
+        chunk=make_chunk("other", [0.7, 0.3], file_path="src/other.py"),
+        score=0.7,
+    )
+
+    monkeypatch.setattr(
+        "contextforge.retriever.retrieve",
+        lambda **kwargs: [shared_first, shared_second, other],
+    )
+    monkeypatch.setattr("contextforge.retriever.retrieve_keywords", lambda **kwargs: [])
+
+    results = retrieve_hybrid(
+        data_dir=tmp_path,
+        project_name="demo",
+        question="How are shared requests handled?",
+        embedder=QueryEmbedder([1.0, 0.0]),
+        top_k=2,
+        candidate_k=3,
+        max_per_file=1,
+        reranker=FakeReranker(["shared-second", "shared-first", "other"]),
+    )
+
+    assert [result.chunk.chunk_id for result in results] == ["shared-second", "other"]
 
 
 @pytest.mark.parametrize(

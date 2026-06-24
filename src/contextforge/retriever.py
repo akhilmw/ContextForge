@@ -11,6 +11,7 @@ from contextforge.ranking import (
     limit_results_per_file,
     reciprocal_rank_fusion,
 )
+from contextforge.reranker import Reranker
 from contextforge.store import load_chunks
 
 
@@ -163,6 +164,7 @@ def retrieve_hybrid(
     max_per_file: int = 1,
     k1: float = 1.5,
     b: float = 0.75,
+    reranker: Reranker | None = None,
 ) -> list[SearchResult]:
     """Fuse semantic and BM25 candidates, then deduplicate and diversify."""
 
@@ -228,6 +230,12 @@ def retrieve_hybrid(
         [semantic_results, keyword_results],
         rank_constant=rank_constant,
     )
+
+    # Rerank before cleanup so the reranker can decide which overlapping
+    # chunks or same-file chunks should survive downstream filters.
+    if reranker is not None:
+        fused = reranker.rerank(question, fused)
+
     deduplicated = deduplicate_overlapping_results(fused, overlap_threshold)
     diverse = limit_results_per_file(deduplicated, max_per_file)
 

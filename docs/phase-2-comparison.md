@@ -165,3 +165,44 @@ remaining semantic failure.
 MRR remains below 1.0 because four successful questions placed their first
 expected source at rank 2. The next quality step should target ordering within
 the fused shortlist rather than adding more first-stage candidate generators.
+
+## Experiment 5 - Hybrid With Heuristic Reranking
+
+The fifth experiment added a local second-stage reranker after RRF and before
+overlap removal, source diversity, and final top-k selection. The reranker does
+not call an external API. It reorders the fused candidate set using lightweight
+signals:
+
+- question-term coverage in chunk content
+- question-term matches in the file path
+- a small preference for implementation files over tests and docs
+- original fused rank as a tie-breaker
+
+Comparison command:
+
+```bash
+uv run python scripts/compare_retrievers.py \
+  --eval-file evals/phase_2_questions.json \
+  --candidate-k 15 \
+  --rank-constant 60 \
+  --overlap-threshold 0.25 \
+  --max-per-file 1 \
+  --bm25-k1 1.5 \
+  --bm25-b 0.75
+```
+
+Results:
+
+| Strategy | Hits | Hit Rate@3 | MRR |
+|---|---:|---:|---:|
+| Semantic baseline | 4/6 | 0.6667 | 0.5000 |
+| Diverse semantic | 5/6 | 0.8333 | 0.5833 |
+| BM25 keyword | 2/6 | 0.3333 | 0.1667 |
+| Hybrid RRF | 6/6 | 1.0000 | 0.6667 |
+| Hybrid + heuristic reranker | 6/6 | 1.0000 | 0.9167 |
+
+The reranker did not change the pass count because hybrid retrieval already
+found relevant files for all six questions. It improved MRR by moving relevant
+files earlier in the top-three list. That is the intended job of reranking:
+improve ordering quality after candidate generation has already found useful
+evidence.
