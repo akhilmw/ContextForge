@@ -30,6 +30,15 @@ LANGUAGE_BY_EXTENSION = {
     ".txt": "text",
 }
 
+REQUIRED_CHUNK_METADATA = {
+    "chunk_id",
+    "project_name",
+    "file_path",
+    "language",
+    "start_line",
+    "end_line",
+}
+
 DEFAULT_CHUNK_SIZE = 20
 DEFAULT_CHUNK_OVERLAP = 5
 PROJECT_NAME_ALLOWED_PATTERN = "^[a-zA-Z0-9_-]+$"
