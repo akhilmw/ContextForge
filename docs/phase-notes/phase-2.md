@@ -1,32 +1,38 @@
-# Phase 2 - Retrieval Quality and LangChain
+# Phase 2 - Retrieval Quality
 
 ## Goal
 
-Improve ContextForge's retrieval quality, then rebuild the RAG pipeline with
-LangChain and compare it with the manual Phase 1 implementation.
+Improve ContextForge retrieval quality with measurable experiments while keeping
+the manual Phase 1 RAG pipeline intact.
 
-Phase 1 made every RAG step visible. Phase 2 should preserve that knowledge:
-LangChain is introduced as another implementation behind the same application
-boundaries, not as a replacement for understanding retrieval.
+Phase 1 proved the end-to-end flow: ingestion, chunking, embeddings, retrieval,
+prompt construction, and answering. Phase 2 focused on the retrieval layer
+itself:
 
-The main success criterion is measurable retrieval quality. A framework change
-by itself does not count as an improvement.
+- better evaluation metrics
+- less redundant retrieval output
+- keyword retrieval alongside semantic retrieval
+- hybrid rank fusion
+- second-stage reranking
+
+LangChain is intentionally deferred to Phase 3. Retrieval quality is a large
+enough topic to stand on its own, and the manual implementation gives us a
+clear baseline before introducing a framework.
 
 ## Starting Baseline
 
-Record the existing Phase 1 results before changing retrieval:
+The initial OpenAI embedding baseline used semantic cosine-similarity retrieval
+only.
 
-- Gemini embeddings: 6/6 retrieval questions passed at top-k 3.
-- OpenAI embeddings: 4/6 retrieval questions passed at top-k 3.
-- Retrieval uses semantic similarity only.
-- Chunks are fixed line ranges with overlap.
-- Results may contain overlapping chunks or several chunks from one file.
-- Evaluation currently reports only per-question pass or fail.
+Configuration:
 
-These results are the baseline. Every retrieval experiment should be compared
-against the same questions, provider, project index, and top-k value.
+- Eval target: HttpGo
+- Eval file: `evals/phase_2_questions.json`
+- Project index: `http-go-openai`
+- Top K: 3
+- Embedding model: OpenAI
 
-Measured OpenAI baseline:
+Baseline result:
 
 ```text
 Summary: 4/6 passed
@@ -34,55 +40,34 @@ Hit Rate@3: 0.6667
 MRR: 0.5000
 ```
 
-## Implementation Progress
+The baseline exposed three retrieval problems:
 
-Completed:
+- repeated chunks from one file could consume multiple top-k positions
+- README and test chunks sometimes outranked implementation files
+- pass/fail alone hid whether relevant files appeared early or late
 
-- Phase 2 folder and file scaffolding
-- Reproducible six-question OpenAI baseline
-- First relevant rank and reciprocal-rank metrics
-- Hit@K and Hit Rate@K metrics
-- Mean reciprocal rank
-- Per-question and aggregate evaluation result models
-- Metric output in the existing retrieval evaluator
-- Exact chunk-ID deduplication
-- Same-file line-overlap measurement and deduplication
-- Candidate overfetching before final top-k selection
-- Semantic and deduplicated evaluator strategies
-- Deduplication experiments at thresholds 0.50 and 0.25
-- Configurable per-file source diversity
-- Diverse evaluator strategy
-- Source-diversity experiments at limits 1 and 2
-- Manual code-aware tokenization
-- Term frequency, document frequency, IDF, and length statistics
-- Per-term and per-document BM25 scoring
-- Keyword retrieval over chunk paths and content
-- Keyword evaluator strategy and BM25 configuration flags
-- Keyword-only baseline: 2/6, Hit Rate@3 0.3333, MRR 0.1667
-- Reciprocal Rank Fusion with deterministic tie handling
-- Hybrid semantic-plus-BM25 retrieval
-- Post-fusion overlap removal and source diversity
-- Hybrid evaluator strategy and RRF configuration
-- Hybrid result: 6/6, Hit Rate@3 1.0000, MRR 0.6667
-- Reranker protocol and deterministic fake reranker
-- Local heuristic reranker using content coverage, path matches,
-  implementation-file preference, and original rank
-- Hybrid reranked evaluator strategy
-- Strategy comparison script
-- Hybrid reranked result: 6/6, Hit Rate@3 1.0000, MRR 0.9167
+## Completed Work
 
-Next:
+Phase 2 added:
 
-- Add optional API-backed reranking for comparison
-- Start LangChain adapter and pipeline work
+- `EvaluationCaseResult` and `EvaluationSummary`
+- first relevant rank
+- reciprocal rank
+- mean reciprocal rank
+- Hit@K and Hit Rate@K
+- exact chunk-ID deduplication
+- same-file line-overlap measurement and deduplication
+- candidate overfetching before final top-k selection
+- configurable per-file source diversity
+- deterministic code-aware tokenization
+- manual BM25 keyword retrieval
+- Reciprocal Rank Fusion for semantic plus keyword retrieval
+- reranker protocol and fake reranker
+- local heuristic reranker
+- strategy support in `scripts/eval_retrieval.py`
+- compact comparison table in `scripts/compare_retrievers.py`
 
-## Retrieval Strategy Results
-
-Eval target: HttpGo
-Eval file: `evals/phase_2_questions.json`
-Project index: `http-go-openai`
-Top K: 3
-Embedding model: OpenAI
+## Final Results
 
 Command:
 
@@ -105,494 +90,166 @@ uv run python scripts/compare_retrievers.py \
 | Hybrid RRF | 6/6 | 1.0000 | 0.6667 |
 | Hybrid + heuristic reranker | 6/6 | 1.0000 | 0.9167 |
 
-The reranker improved MRR without changing Hit Rate@3. Hybrid retrieval was
-already finding the correct files, but heuristic reranking moved the relevant
-files earlier in the result list.
+The final retrieval stack improved Hit Rate@3 from `0.6667` to `1.0000` and
+MRR from `0.5000` to `0.9167`.
 
-## Phase Boundaries
+The key result is not just that the right files appeared in the top three. The
+reranker moved relevant files earlier in the result list, which is why MRR
+improved after hybrid retrieval had already reached `6/6`.
 
-Phase 2 includes:
-
-- A larger and more descriptive retrieval evaluation set
-- Hit rate, hit rate at k, reciprocal rank, and mean reciprocal rank
-- Retrieval result deduplication and source diversity
-- Neighbor expansion for adjacent source chunks
-- Keyword retrieval alongside semantic retrieval
-- Hybrid score fusion
-- Second-stage reranking of a broader candidate set
-- A LangChain RAG implementation using existing provider boundaries where
-  practical
-- Side-by-side manual and LangChain evaluation
-- Comparison notes covering behavior, complexity, and tradeoffs
-- Unit tests using deterministic fakes
-
-Phase 2 does not include:
-
-- PostgreSQL or pgvector
-- LangGraph agents
-- MCP servers
-- GitHub, database, or log ingestion
-- Background jobs
-- A web interface
-- Replacing the local JSON project store
-- Production authentication, deployment, or observability
-
-FastAPI is deferred until the retrieval and LangChain boundaries are stable.
-Otherwise the API would expose contracts that are still changing.
-
-## Target Architecture
-
-### Ingestion pipeline
-
-The Phase 1 ingestion pipeline remains the source of stored chunks:
-
-```text
-Repository
-  -> discovery
-  -> loading
-  -> line chunking
-  -> embeddings
-  -> local JSON project index
-```
-
-Phase 2 may add metadata required by improved retrieval, but it should not
-rewrite working ingestion components without an evaluation-backed reason.
-
-### Manual retrieval pipeline
+## Final Manual Retrieval Pipeline
 
 ```text
 Question
   -> semantic candidates
-  -> keyword candidates
-  -> score normalization and fusion
-  -> second-stage reranking
-  -> duplicate removal and source diversification
-  -> optional neighboring chunks
-  -> ranked SearchResults
+  -> BM25 keyword candidates
+  -> Reciprocal Rank Fusion
+  -> heuristic reranking
+  -> overlap deduplication
+  -> source diversity
+  -> top-k SearchResults
 ```
-
-Each stage should be independently testable. Candidate generation finds likely
-evidence; ranking combines signals; result processing controls redundancy and
-context coverage.
-
-### LangChain ask pipeline
-
-```text
-Question
-  -> LangChain Documents and retriever
-  -> prompt template
-  -> chat model
-  -> parsed answer
-  -> ContextForge Answer and Source models
-```
-
-LangChain-specific objects must remain inside `langchain_rag.py` and
-`langchain_adapters.py`. Scripts and callers should receive ContextForge domain
-models rather than framework-specific objects.
-
-### Evaluation pipeline
-
-```text
-Phase 2 question set
-  -> selected retrieval implementation
-  -> ranked results
-  -> expected-source comparison
-  -> per-question rank metrics
-  -> aggregate comparison report
-```
-
-Generation evaluation is not part of this phase. Retrieval should be measured
-separately so an LLM answer cannot hide missing evidence.
 
 ## Folder and File Structure
 
-Existing Phase 1 files stay in place. Phase 2 adds the following files:
+Phase 2 primarily uses these files:
 
 ```text
 ContextForge/
   docs/
     phase-notes/
-      phase-2.md                 # Scope, architecture, and learning plan
-    phase-2-comparison.md        # Results and manual-vs-LangChain findings
+      phase-2.md
+    phase-2-comparison.md
 
   evals/
-    phase_2_questions.json       # Expanded retrieval evaluation cases
+    phase_2_questions.json
 
   scripts/
-    compare_retrievers.py        # Run implementations against one eval set
+    eval_retrieval.py
+    compare_retrievers.py
 
   src/contextforge/
-    evaluation.py                # Metric calculation and report models
-    keyword_retriever.py         # Keyword candidate generation
-    ranking.py                   # Fusion, deduplication, and diversity logic
-    reranker.py                  # Second-stage candidate reranking
-    context_expander.py          # Add neighboring chunks to selected evidence
-    langchain_adapters.py        # Domain model and LangChain conversions
-    langchain_rag.py             # LangChain ingestion/retrieval/ask composition
+    evaluation.py
+    keyword_retriever.py
+    ranking.py
+    reranker.py
+    retriever.py
 
   tests/
     test_evaluation.py
     test_keyword_retriever.py
     test_ranking.py
     test_reranker.py
-    test_context_expander.py
-    test_langchain_adapters.py
-    test_langchain_rag.py
+    test_retriever.py
+    test_eval_retrieval_script.py
     test_compare_retrievers_script.py
 ```
 
-Phase 1 modules that Phase 2 will reuse or extend:
-
-```text
-src/contextforge/models.py       # Domain models remain framework-independent
-src/contextforge/retriever.py    # Existing semantic retrieval baseline
-src/contextforge/store.py        # Existing local project index
-src/contextforge/embedder.py     # Existing embedding provider protocol
-src/contextforge/prompt_builder.py
-src/contextforge/llm.py
-src/contextforge/ask.py
-scripts/eval_retrieval.py        # Existing baseline eval runner
-```
-
-Do not create a separate `phase2` package. Retrieval concepts belong in the
-main `contextforge` package and should remain usable after Phase 2 ends.
-
 ## Core Contracts
 
-The exact types should be designed during implementation, but these behavioral
-contracts should guide the modules:
-
-- A retriever accepts a project, question, and result limit, then returns
-  ranked `SearchResult` objects.
+- Evaluation accepts ranked source paths and expected source paths, then returns
+  deterministic metrics.
 - Ranking logic accepts scored candidates and does not access files or call an
   embedding API.
+- Keyword retrieval returns the same `SearchResult` domain model as semantic
+  retrieval.
+- Hybrid retrieval combines rank positions rather than incompatible raw scores.
 - A reranker accepts a question and candidate results, then returns the same
-  candidates in a new deterministic order without retrieving additional data.
-- Context expansion accepts selected results and stored chunks, then returns
-  ordered evidence without duplicate chunk IDs.
-- Evaluation accepts ranked source paths and expected source paths, then
-  returns deterministic metrics.
-- LangChain adapters perform conversion only; they do not retrieve or generate.
-- The LangChain pipeline returns existing `Answer` and `Source` models.
+  candidates in a new deterministic order.
+- Rerankers must not introduce, drop, or duplicate candidates.
 
-## Implementation Order
+## Experiment Summary
 
-### Step 1 - Freeze and describe the baseline
+### 1. Evaluation Metrics
 
-Files:
+Phase 1 reported pass/fail. Phase 2 added rank-aware metrics so we can measure
+whether the first relevant result appears early.
 
-- `evals/phase_2_questions.json`
-- `docs/phase-2-comparison.md`
+MRR became important because two strategies can both pass, while one returns
+the useful source at rank 1 and another returns it at rank 3.
 
-Tasks:
+### 2. Overlap Deduplication
 
-- Copy the useful Phase 1 questions into the Phase 2 schema.
-- Add questions that expose the observed failures: function bodies split across
-  chunks, README dominance, test-file dominance, and repeated files.
-- Record embedding provider, top-k, and index configuration with each run.
-- Run the unchanged Phase 1 retriever and record its results before edits.
+Overlap deduplication removed exact duplicate chunk IDs and highly overlapping
+same-file line ranges.
 
-Checkpoint:
+This did not improve the eval score by itself. That was useful evidence: the
+main failure was not exact duplication, but ranking capacity and source
+dominance.
 
-- The baseline can be reproduced from one command.
-- Each question has at least one explicit expected source path.
+### 3. Source Diversity
 
-### Step 2 - Build evaluation metrics
+Source diversity limited how many chunks from one file could occupy the final
+result set.
 
-File:
+This improved the OpenAI eval from `4/6` to `5/6` by preventing README chunks
+from consuming the full top-three result budget.
 
-- `src/contextforge/evaluation.py`
+### 4. BM25 Keyword Retrieval
 
-Tasks:
+BM25 keyword retrieval was implemented manually to understand sparse retrieval
+instead of treating it as a black box.
 
-- Represent one evaluation case and one case result.
-- Calculate whether an expected source appears in the results.
-- Calculate the rank of the first relevant source.
-- Calculate reciprocal rank and aggregate mean reciprocal rank.
-- Report hit rate at configurable k values.
-- Keep metric calculation independent from providers and network calls.
+BM25 alone was worse than semantic retrieval on this eval (`2/6`), but it
+provided different ranking evidence that became useful in hybrid retrieval.
 
-Tests:
+### 5. Hybrid Reciprocal Rank Fusion
 
-- `tests/test_evaluation.py`
+Hybrid retrieval combined semantic and BM25 rankings with Reciprocal Rank
+Fusion.
 
-Checkpoint:
+RRF was chosen because semantic similarity scores and BM25 scores are not on
+the same scale. Rank positions are safer to combine than raw scores.
 
-- Hand-written ranked paths produce predictable metrics.
-- Missing expected files produce rank `None` and reciprocal rank `0`.
+Hybrid retrieval reached `6/6`, recovering the final missed implementation
+file.
 
-### Step 3 - Add the comparison runner
+### 6. Heuristic Reranking
 
-File:
+The heuristic reranker reordered fused candidates using:
 
-- `scripts/compare_retrievers.py`
+- question-term coverage in chunk content
+- question-term matches in file paths
+- small implementation-file preference over docs and tests
+- original rank as a tie-breaker
 
-Tasks:
+This kept Hit Rate@3 at `1.0000` while improving MRR to `0.9167`.
 
-- Load one evaluation file.
-- Run a named retrieval implementation with the same cases and top-k.
-- Print per-question rank and aggregate hit-rate/MRR results.
-- Make failures return a useful process exit code.
-- Avoid live API calls in script unit tests.
+## Deferred Work
 
-Tests:
+The following are intentionally not part of Phase 2:
 
-- `tests/test_compare_retrievers_script.py`
-
-Checkpoint:
-
-- Manual semantic retrieval can be recorded as the first reproducible baseline.
-
-### Step 4 - Reduce redundant results
-
-File:
-
-- `src/contextforge/ranking.py`
-
-Tasks:
-
-- Remove duplicate chunk IDs.
-- Detect strongly overlapping line ranges from the same file.
-- Add a configurable maximum number of initial results per file.
-- Preserve deterministic ordering when scores tie.
-- Measure changes rather than assuming greater diversity is always better.
-
-Tests:
-
-- `tests/test_ranking.py`
-
-Checkpoint:
-
-- Repeated overlapping chunks do not consume the full context budget.
-- Relevant same-file chunks are not removed merely because paths match.
-
-### Step 5 - Add neighboring context
-
-File:
-
-- `src/contextforge/context_expander.py`
-
-Tasks:
-
-- Find the previous and next stored chunks from the same file.
-- Expand only after initial ranking so neighbors do not compete as search hits.
-- Deduplicate neighbors already selected by retrieval.
-- Preserve source order for prompt readability.
-- Enforce a context budget.
-
-Tests:
-
-- `tests/test_context_expander.py`
-
-Checkpoint:
-
-- A hit at the start of a function can include its adjacent continuation.
-- Expansion never crosses into another file.
-
-### Step 6 - Add keyword retrieval
-
-File:
-
-- `src/contextforge/keyword_retriever.py`
-
-Tasks:
-
-- Tokenize questions and chunks deterministically.
-- Score exact identifiers, file names, and content terms.
-- Avoid introducing a search service or database in this phase.
-- Return the same `SearchResult` domain model as semantic retrieval.
-- Handle empty questions and indexes explicitly.
-
-Tests:
-
-- `tests/test_keyword_retriever.py`
-
-Checkpoint:
-
-- Exact code identifiers can be found even when semantic retrieval misses them.
-
-### Step 7 - Build hybrid ranking
-
-File:
-
-- `src/contextforge/ranking.py`
-
-Tasks:
-
-- Combine semantic and keyword candidate rankings.
-- Start with reciprocal rank fusion because provider score scales differ.
-- Make fusion weights and result limits explicit configuration.
-- Apply deduplication and diversity after fusion.
-- Compare semantic-only, keyword-only, and hybrid metrics.
-
-Checkpoint:
-
-- Hybrid retrieval is kept only if it improves the evaluation or solves a
-  documented failure without unacceptable regressions.
-
-### Step 8 - Add second-stage reranking
-
-File:
-
-- `src/contextforge/reranker.py`
-
-Tasks:
-
-- Define a small reranker protocol that is independent of any provider.
-- Retrieve a broader candidate set, such as 15-20 chunks, before reranking.
-- Return only the final top-k results after reranking.
-- Begin with a deterministic fake or heuristic reranker for contract tests.
-- Optionally add one provider-based reranker after the local contract works.
-- Preserve chunk metadata and prevent a reranker from introducing new chunks.
-- Apply deduplication and source diversity after reranking.
-- Apply neighboring-context expansion only after final results are selected.
-- Compare retrieval quality, latency, and API cost with reranking disabled and
-  enabled.
-
-Tests:
-
-- `tests/test_reranker.py`
-
-Checkpoint:
-
-- The reranker can change candidate order without changing candidate identity.
-- Invalid provider responses, duplicate results, and missing candidates fail
-  clearly.
-- Reranking is kept only when its measured benefit justifies added latency and
-  cost.
-
-### Step 9 - Introduce LangChain adapters
-
-File:
-
-- `src/contextforge/langchain_adapters.py`
-
-Tasks:
-
-- Convert ContextForge `Document` and `Chunk` models to LangChain documents.
-- Preserve chunk IDs, project names, paths, languages, and line ranges as
-  metadata.
-- Convert retrieved LangChain documents back into `SearchResult` objects.
-- Raise clear errors when required metadata is missing.
-
-Tests:
-
-- `tests/test_langchain_adapters.py`
-
-Checkpoint:
-
-- A domain object survives a conversion round trip without losing citations.
-
-### Step 10 - Build the LangChain RAG path
-
-File:
-
-- `src/contextforge/langchain_rag.py`
-
-Tasks:
-
-- Compose loading, splitting, embeddings, retrieval, prompting, and generation
-  using focused LangChain components.
-- Keep provider selection outside the core chain.
-- Return ContextForge domain models at the public boundary.
-- Keep the manual Phase 1 path operational for comparison.
-- Do not add LangGraph; this is a deterministic pipeline, not an agent.
-
-Tests:
-
-- `tests/test_langchain_rag.py`
-
-Checkpoint:
-
-- The LangChain path answers through fakes without network access.
-- Citations retain exact file and line metadata.
-
-### Step 11 - Compare and document
-
-File:
-
-- `docs/phase-2-comparison.md`
-
-Tasks:
-
-- Run manual semantic, manual hybrid, and LangChain retrieval consistently.
-- Record hit rate at k, MRR, latency observations, and failure examples.
-- Compare code visibility, control, testability, dependency cost, and extension
-  effort.
-- Document which implementation becomes the default and why.
-- Update `README.md`, `docs/architecture.md`, and `docs/learning-log.md`.
-
-Checkpoint:
-
-- The final choice is supported by measurements and concrete tradeoffs.
-
-## Dependency Strategy
-
-Do not install all LangChain integrations at the start. Add dependencies only
-when the relevant implementation step begins.
-
-Expected minimum packages should be verified against current LangChain
-documentation at that time. Likely categories are:
-
-- LangChain core abstractions
-- The provider integration actually used in the experiment
-- A reranker integration only if the provider experiment is retained
-- A local/in-memory vector-store integration only if required
-
-Pin compatible versions through `uv`, and commit `uv.lock` changes with the
-step that first uses them.
-
-## Test Strategy
-
-- Unit tests use deterministic chunks, vectors, rankings, and fake models.
-- Existing Phase 1 tests must continue passing.
-- Live provider tests remain optional integration tests.
-- Retrieval experiments must use the same evaluation cases and settings.
-- Each bug found in evaluation should become a small regression test when its
-  expected behavior is deterministic.
-
-## Learning Order
-
-Implement one small contract at a time:
-
-1. Learn why a metric is needed before coding it.
-2. Write examples by hand and predict their output.
-3. Implement the smallest function that satisfies the contract.
-4. Add edge-case tests.
-5. Run the retrieval evaluation.
-6. Record what changed and why.
-
-For LangChain, map every abstraction back to its manual Phase 1 equivalent.
-For example, a LangChain retriever should be understood in terms of query
-embedding, candidate scoring, top-k selection, and returned metadata.
+- LangChain RAG implementation
+- LangGraph agents
+- PostgreSQL or pgvector
+- API-backed reranking
+- GitHub, database, or log ingestion
+- FastAPI server
+- web UI
+- production authentication, deployment, or observability
 
 ## Definition of Done
 
-Phase 2 is complete when:
+Phase 2 is complete because:
 
-- The Phase 1 baseline is recorded and reproducible.
-- Evaluation reports hit rate at k and MRR, not only pass/fail.
-- Redundant retrieval results are handled predictably.
-- Neighbor expansion can recover adjacent source context.
-- Keyword and hybrid retrieval are evaluated against semantic retrieval.
-- Second-stage reranking is evaluated for quality, latency, and cost.
-- A LangChain RAG path works without removing the manual path.
-- Both paths return ContextForge answers with file and line citations.
-- Core behavior has deterministic unit tests.
-- Manual and LangChain approaches are compared using the same evaluation set.
-- Architecture, README, comparison notes, and learning log are updated.
+- the semantic baseline is recorded and reproducible
+- evaluation reports Hit Rate@K and MRR
+- redundant retrieval results are handled predictably
+- keyword and semantic retrieval are both implemented
+- hybrid retrieval is evaluated against semantic and keyword baselines
+- second-stage reranking is evaluated
+- results are documented in `README.md` and `docs/phase-2-comparison.md`
+- deterministic tests cover the retrieval-quality modules
 
 ## Expected Learning Outcomes
 
 By the end of Phase 2, you should be able to explain:
 
-- Why hit rate and MRR reveal different retrieval behavior.
-- Why semantic retrieval can miss exact identifiers.
-- Why repeated high-scoring chunks can reduce answer quality.
-- How neighbor expansion differs from retrieving more chunks.
-- How hybrid retrieval combines different relevance signals.
-- How first-stage retrieval differs from second-stage reranking.
-- Why rerankers usually process a shortlist rather than the entire index.
-- Which LangChain abstractions correspond to the manual Phase 1 modules.
-- What LangChain simplifies and what control it hides.
-- Why evaluation should drive architecture choices in a RAG system.
+- why Hit Rate@K and MRR measure different retrieval behavior
+- why semantic retrieval can miss exact identifiers
+- why BM25 can be weak alone but useful in hybrid retrieval
+- why repeated high-scoring chunks can reduce answer quality
+- why RRF combines rankings instead of raw scores
+- how first-stage retrieval differs from second-stage reranking
+- why rerankers operate on a shortlist instead of the whole index
+- why retrieval evaluation should drive RAG architecture decisions
