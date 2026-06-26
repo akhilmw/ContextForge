@@ -7,7 +7,9 @@ from contextforge.langchain_adapters import (
     chunk_to_langchain_document,
     langchain_document_to_chunk,
 )
-from contextforge.models import SearchResult
+from contextforge.llm import LLM
+from contextforge.models import Answer, SearchResult
+from contextforge.prompt_builder import build_prompt, results_to_sources
 from contextforge.retriever import cosine_similarity
 from contextforge.store import load_chunks
 
@@ -46,3 +48,26 @@ def retrieve_with_langchain(
 
     results.sort(key=lambda x: x.score, reverse=True)
     return results[:top_k]
+
+
+def ask_with_langchain(
+    data_dir: Path,
+    project_name: str,
+    question: str,
+    embedder: Embedder,
+    llm: LLM,
+    top_k: int = 5,
+) -> Answer:
+    """Retrieve through the LangChain boundary, then generate a grounded answer."""
+    results = retrieve_with_langchain(
+        data_dir=data_dir,
+        project_name=project_name,
+        question=question,
+        embedder=embedder,
+        top_k=top_k,
+    )
+    sources = results_to_sources(results)
+    prompt = build_prompt(question, results)
+    response = llm.generate(prompt)
+
+    return Answer(text=response, sources=sources)
